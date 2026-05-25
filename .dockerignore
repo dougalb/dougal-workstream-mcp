@@ -1,0 +1,14 @@
+.git
+.codex
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.venv
+__pycache__
+*.pyc
+.workstream
+exports
+logs
+dist
+build
+*.egg-info

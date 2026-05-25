@@ -1,0 +1,25 @@
+services:
+  workstream-mcp:
+    build: .
+    image: dougal-workstream-mcp:0.1
+    container_name: workstream-mcp
+    environment:
+      WORKSTREAM_DB_PATH: /data/workstream.db
+      WORKSTREAM_EXPORT_DIR: /exports
+      WORKSTREAM_CONFIG_PATH: /config/workstream.yaml
+    ports:
+      - "8000:8000"
+    volumes:
+      - workstream-data:/data
+      - ./exports:/exports
+      - ./config:/config:ro
+      - ./logs:/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  workstream-data:

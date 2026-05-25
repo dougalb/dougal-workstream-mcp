@@ -1,0 +1,35 @@
+{
+  "project": "dougal-workstream-mcp",
+  "repo_path": "/home/dougalb/workspace/dougal-workstream-mcp",
+  "host": "local",
+  "goal": "Implement v0.1 local-first MCP workstream server",
+  "status": "implemented",
+  "changed_files": [
+    "src/workstream_mcp/server.py",
+    "src/workstream_mcp/db.py",
+    "src/workstream_mcp/tools.py",
+    "src/workstream_mcp/resources.py",
+    "src/workstream_mcp/prompts.py",
+    "src/workstream_mcp/cli.py"
+  ],
+  "commands_run": [
+    "workstream init",
+    "workstream capture --file examples/handoff.json --source chatgpt --project dougal-workstream-mcp",
+    "workstream export-markdown"
+  ],
+  "tests_summary": "Unit tests cover database initialization, core write tools, resources, markdown export, CLI smoke behavior, and secret rejection.",
+  "decisions": [
+    {
+      "title": "Keep v0.1 local-only",
+      "summary": "No public internet exposure or hosted auth is implemented in v0.1."
+    }
+  ],
+  "next_actions": [
+    {
+      "title": "Validate with a real MCP client",
+      "priority": "high"
+    }
+  ],
+  "blockers": [],
+  "sensitivity": "internal"
+}

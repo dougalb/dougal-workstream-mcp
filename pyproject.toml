@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dougal-workstream-mcp"
+version = "0.1.0"
+description = "Local-first MCP workstream server backed by SQLite."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Dougal Workstream" }
+]
+dependencies = [
+  "mcp>=1.23.0",
+  "PyYAML>=6.0",
+  "starlette>=0.37",
+  "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+workstream = "workstream_mcp.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/workstream_mcp"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
