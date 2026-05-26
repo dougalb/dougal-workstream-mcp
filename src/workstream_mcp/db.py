@@ -80,7 +80,18 @@ class WorkstreamDB:
         self.initialize()
         if isinstance(project_id, int) or str(project_id).isdigit():
             return self.query_one("SELECT * FROM projects WHERE id = ?", (int(project_id),))
-        return self.query_one("SELECT * FROM projects WHERE slug = ?", (slugify(str(project_id)),))
+
+        value = str(project_id).strip()
+        slug = slugify(value)
+        return self.query_one(
+            """
+            SELECT * FROM projects
+            WHERE slug = ? OR lower(name) = lower(?)
+            ORDER BY CASE WHEN slug = ? THEN 0 ELSE 1 END
+            LIMIT 1
+            """,
+            (slug, value, slug),
+        )
 
     def create_event(
         self,
@@ -321,7 +332,7 @@ class WorkstreamDB:
                    COUNT(DISTINCT b.id) AS open_blockers,
                    MAX(e.created_at) AS last_event_at
             FROM projects p
-            LEFT JOIN tasks t ON t.project_id = p.id AND t.status = 'open'
+            LEFT JOIN tasks t ON t.project_id = p.id AND t.status IN ('open', 'blocked')
             LEFT JOIN blockers b ON b.project_id = p.id AND b.status = 'open'
             LEFT JOIN events e ON e.project_id = p.id
             GROUP BY p.id
@@ -332,7 +343,7 @@ class WorkstreamDB:
     def list_open_tasks(self, project: str | int | None = None) -> list[dict[str, Any]]:
         self.initialize()
         params: list[Any] = []
-        where = "t.status = 'open'"
+        where = "t.status IN ('open', 'blocked')"
         if project:
             project_row = self.get_project(project)
             if project_row is None:
@@ -405,7 +416,7 @@ class WorkstreamDB:
             "project": project_row,
             "recent_events": self.recent_events(limit=10, project=project_id),
             "open_tasks": self.query_all(
-                "SELECT * FROM tasks WHERE project_id = ? AND status = 'open' ORDER BY created_at DESC",
+                "SELECT * FROM tasks WHERE project_id = ? AND status IN ('open', 'blocked') ORDER BY created_at DESC",
                 (project_id,),
             ),
             "decisions": self.query_all(
@@ -424,6 +435,139 @@ class WorkstreamDB:
                 "SELECT * FROM codex_sessions WHERE project_id = ? ORDER BY created_at DESC LIMIT 20",
                 (project_id,),
             ),
+        }
+
+    def update_task_status(self, task_id: int, status: str) -> dict[str, Any]:
+        allowed = {"open", "blocked", "done"}
+        if status not in allowed:
+            raise ValueError(f"Task status must be one of: {', '.join(sorted(allowed))}")
+
+        now = utc_now()
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT t.*, p.slug AS project_slug, p.name AS project_name
+                FROM tasks t
+                JOIN projects p ON p.id = t.project_id
+                WHERE t.id = ?
+                """,
+                (task_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Task {task_id} was not found")
+
+            conn.execute(
+                "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, task_id),
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO events (
+                    project_id, event_type, source, title, summary, sensitivity,
+                    metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["project_id"],
+                    "task_status",
+                    "workstream",
+                    f"Task {task_id} marked {status}",
+                    row["title"],
+                    row["sensitivity"],
+                    json.dumps({"task_id": task_id, "status": status}, sort_keys=True),
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+            updated = self.query_one(
+                """
+                SELECT t.*, p.slug AS project_slug, p.name AS project_name
+                FROM tasks t
+                JOIN projects p ON p.id = t.project_id
+                WHERE t.id = ?
+                """,
+                (task_id,),
+            )
+            if updated is None:
+                raise RuntimeError("Task update failed")
+            updated["event_id"] = int(cursor.lastrowid)
+            return updated
+
+    def update_blocker_status(self, blocker_id: int, status: str) -> dict[str, Any]:
+        allowed = {"open", "resolved"}
+        if status not in allowed:
+            raise ValueError(f"Blocker status must be one of: {', '.join(sorted(allowed))}")
+
+        now = utc_now()
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT b.*, p.slug AS project_slug, p.name AS project_name
+                FROM blockers b
+                JOIN projects p ON p.id = b.project_id
+                WHERE b.id = ?
+                """,
+                (blocker_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Blocker {blocker_id} was not found")
+
+            conn.execute(
+                "UPDATE blockers SET status = ?, updated_at = ? WHERE id = ?",
+                (status, now, blocker_id),
+            )
+            cursor = conn.execute(
+                """
+                INSERT INTO events (
+                    project_id, event_type, source, title, summary, sensitivity,
+                    metadata_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    row["project_id"],
+                    "blocker_status",
+                    "workstream",
+                    f"Blocker {blocker_id} marked {status}",
+                    row["title"],
+                    row["sensitivity"],
+                    json.dumps({"blocker_id": blocker_id, "status": status}, sort_keys=True),
+                    now,
+                    now,
+                ),
+            )
+            conn.commit()
+            updated = self.query_one(
+                """
+                SELECT b.*, p.slug AS project_slug, p.name AS project_name
+                FROM blockers b
+                JOIN projects p ON p.id = b.project_id
+                WHERE b.id = ?
+                """,
+                (blocker_id,),
+            )
+            if updated is None:
+                raise RuntimeError("Blocker update failed")
+            updated["event_id"] = int(cursor.lastrowid)
+            return updated
+
+    def health(self) -> dict[str, Any]:
+        self.initialize()
+        with self.connect() as conn:
+            conn.execute("CREATE TEMP TABLE IF NOT EXISTS workstream_healthcheck (ok INTEGER)")
+            conn.execute("INSERT INTO workstream_healthcheck (ok) VALUES (1)")
+            conn.execute("DELETE FROM workstream_healthcheck")
+            project_count = conn.execute("SELECT COUNT(*) AS count FROM projects").fetchone()["count"]
+            event_count = conn.execute("SELECT COUNT(*) AS count FROM events").fetchone()["count"]
+        return {
+            "status": "ok",
+            "database": str(self.path),
+            "readable": True,
+            "writable": True,
+            "project_count": int(project_count),
+            "event_count": int(event_count),
         }
 
     def search(self, query: str, project: str | int | None = None, limit: int = 20) -> list[dict[str, Any]]:

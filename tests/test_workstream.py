@@ -6,9 +6,9 @@ from pathlib import Path
 from workstream_mcp.cli import _load_capture_file, main
 from workstream_mcp.db import WorkstreamDB
 from workstream_mcp.export import export_markdown
-from workstream_mcp.resources import render_open_tasks, render_projects
+from workstream_mcp.resources import render_open_tasks, render_project_brief, render_projects
 from workstream_mcp.safety import SecretDetectedError, assert_safe_to_store
-from workstream_mcp.tools import capture_handoff, record_codex_session, search_workstream
+from workstream_mcp.tools import capture_handoff, record_codex_session, search_workstream, update_blocker_status, update_task_status
 
 
 def test_initialize_database_creates_tables(tmp_path: Path) -> None:
@@ -173,6 +173,116 @@ def test_search_workstream(tmp_path: Path) -> None:
     result = search_workstream("searchable", db_path=db_path)
     assert result["results"]
     assert result["results"][0]["project"] == "demo-project"
+
+
+def test_project_brief_markdown_and_json(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    capture_handoff(
+        source="chatgpt",
+        project="Brief Project",
+        title="Brief handoff",
+        summary="Briefable context",
+        next_actions=["Feed this to OpenClaw"],
+        db_path=db_path,
+    )
+
+    markdown = render_project_brief("brief-project", db_path=db_path)
+    payload = json.loads(render_project_brief("Brief Project", db_path=db_path, output_format="json"))
+    assert "Brief Project" in markdown
+    assert payload["project"]["slug"] == "brief-project"
+    assert payload["open_tasks"][0]["title"] == "Feed this to OpenClaw"
+
+
+def test_status_updates_create_events_and_filter_done_tasks(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    result = capture_handoff(
+        source="chatgpt",
+        project="Status Project",
+        title="Status handoff",
+        summary="Status context",
+        next_actions=["Track me"],
+        blockers=["Unblock me"],
+        db_path=db_path,
+    )
+
+    task_update = update_task_status(result["task_ids"][0], "blocked", db_path=db_path)
+    blocker_update = update_blocker_status(result["blocker_ids"][0], "resolved", db_path=db_path)
+    assert task_update["status"] == "blocked"
+    assert blocker_update["status"] == "resolved"
+    assert "status: blocked" in render_open_tasks(db_path=db_path)
+
+    update_task_status(result["task_ids"][0], "done", db_path=db_path)
+    assert "Track me" not in render_open_tasks(db_path=db_path)
+
+    db = WorkstreamDB(db_path)
+    event_types = {row["event_type"] for row in db.query_all("SELECT event_type FROM events")}
+    assert {"task_status", "blocker_status"} <= event_types
+
+
+def test_record_codex_session_cli_from_file_and_brief(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "workstream.db"
+    export_dir = tmp_path / "exports"
+    session = tmp_path / "codex-session.json"
+    session.write_text(
+        json.dumps(
+            {
+                "project": "CLI Codex Project",
+                "repo_path": "/tmp/repo",
+                "host": "local",
+                "goal": "Validate CLI ingestion",
+                "status": "done",
+                "changed_files": ["src/example.py"],
+                "commands_run": ["pytest"],
+                "tests_summary": "passed",
+                "decisions": [],
+                "next_actions": ["Read the brief"],
+                "blockers": [],
+                "sensitivity": "internal",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("WORKSTREAM_DB_PATH", str(db_path))
+    monkeypatch.setenv("WORKSTREAM_EXPORT_DIR", str(export_dir))
+
+    assert main(["record-codex-session", "--file", str(session)]) == 0
+    assert main(["brief", "CLI Codex Project", "--format", "json"]) == 0
+    db = WorkstreamDB(db_path)
+    assert db.query_one("SELECT COUNT(*) AS count FROM codex_sessions")["count"] == 1
+    assert db.get_project("CLI Codex Project")["slug"] == "cli-codex-project"
+
+
+def test_cli_status_updates_and_doctor(tmp_path: Path, monkeypatch) -> None:
+    db_path = tmp_path / "workstream.db"
+    export_dir = tmp_path / "exports"
+    monkeypatch.setenv("WORKSTREAM_DB_PATH", str(db_path))
+    monkeypatch.setenv("WORKSTREAM_EXPORT_DIR", str(export_dir))
+
+    result = capture_handoff(
+        source="chatgpt",
+        project="CLI Status Project",
+        title="Status handoff",
+        summary="Summary",
+        next_actions=["CLI task"],
+        blockers=["CLI blocker"],
+        db_path=db_path,
+    )
+
+    assert main(["update-task", str(result["task_ids"][0]), "--status", "done"]) == 0
+    assert main(["update-blocker", str(result["blocker_ids"][0]), "--status", "resolved"]) == 0
+    assert main(["doctor", "--format", "json"]) == 0
+    db = WorkstreamDB(db_path)
+    assert db.query_one("SELECT status FROM tasks WHERE id = ?", (result["task_ids"][0],))["status"] == "done"
+    assert db.query_one("SELECT status FROM blockers WHERE id = ?", (result["blocker_ids"][0],))["status"] == "resolved"
+
+
+def test_http_app_exposes_health_and_ready_routes() -> None:
+    from workstream_mcp.server import create_http_app
+
+    app = create_http_app()
+    paths = {getattr(route, "path", "") for route in app.routes}
+    assert "/healthz" in paths
+    assert "/readyz" in paths
 
 
 def test_cli_init_capture_and_list(tmp_path: Path, monkeypatch) -> None:

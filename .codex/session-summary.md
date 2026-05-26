@@ -34,3 +34,33 @@ Project: dougal-workstream-mcp
 - Exercise stdio mode with Claude Desktop or MCP Inspector.
 - Exercise HTTP mode with an MCP client at `http://localhost:8000/mcp`.
 - Add a read-only OpenClaw bridge once the desired integration path is clear.
+
+
+# v0.2 Session Summary
+
+## What Was Built
+
+- Bumped package version to `0.2.0`.
+- Added project brief bridge output for local agents: `workstream brief PROJECT` and `workstream brief PROJECT --format json`.
+- Added Codex session ingestion command: `workstream record-codex-session --file FILE`.
+- Added task status transitions: `open`, `blocked`, `done`.
+- Added blocker status transitions: `open`, `resolved`.
+- Added MCP tools for task and blocker status updates.
+- Added richer `/healthz` plus `/readyz`, backed by database read/write checks.
+- Added `workstream doctor` diagnostics in Markdown and JSON.
+- Added start-session and end-session example documents.
+
+## Verification
+
+- Syntax check passed with `python3 -m compileall -q src tests`.
+- Unit tests passed: 14 tests.
+- CLI smoke checks passed for init, capture, Codex session ingestion, brief JSON, status updates, and doctor JSON.
+- HTTP smoke checks passed for `/healthz` and `/readyz`.
+- Docker Compose config validation passed.
+- Docker image build passed for `dougal-workstream-mcp:test`.
+
+## Remaining Gaps
+
+- Real Claude Desktop/MCP Inspector client validation is still manual.
+- OpenClaw bridge integration is represented by CLI brief output but no OpenClaw-specific adapter has been added.
+- No public exposure, hosted auth, sync engine, or multi-user permission model has been added.

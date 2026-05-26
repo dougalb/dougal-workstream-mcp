@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -10,8 +11,8 @@ from typing import Any
 from .config import load_config
 from .db import WorkstreamDB
 from .export import export_markdown
-from .resources import render_open_tasks, render_projects, render_recent
-from .tools import capture_handoff
+from .resources import render_open_tasks, render_project_brief, render_projects, render_recent
+from .tools import capture_handoff, record_codex_session, update_blocker_status, update_task_status
 
 
 SECTION_ALIASES = {
@@ -128,6 +129,67 @@ def _load_capture_file(path: Path, source: str | None, project: str | None) -> d
     return data
 
 
+def _load_json_file(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return data
+
+
+def _doctor_report(database: WorkstreamDB) -> dict[str, Any]:
+    config = load_config()
+    report: dict[str, Any] = {
+        "status": "ok",
+        "db_path": str(database.path),
+        "export_dir": str(config.export_dir),
+        "config_path": str(config.config_path),
+        "config_present": config.config_path.exists(),
+        "log_dir": str(config.log_dir) if config.log_dir else None,
+        "environment": {
+            key: os.environ.get(key)
+            for key in ["WORKSTREAM_DB_PATH", "WORKSTREAM_EXPORT_DIR", "WORKSTREAM_CONFIG_PATH", "WORKSTREAM_LOG_DIR"]
+            if os.environ.get(key)
+        },
+        "checks": {},
+    }
+
+    checks = report["checks"]
+    try:
+        checks["database"] = database.health()
+    except Exception as exc:
+        report["status"] = "error"
+        checks["database"] = {"status": "error", "error": str(exc)}
+
+    try:
+        config.export_dir.mkdir(parents=True, exist_ok=True)
+        probe = config.export_dir / ".workstream-write-test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+        checks["exports"] = {"status": "ok", "writable": True}
+    except Exception as exc:
+        report["status"] = "error"
+        checks["exports"] = {"status": "error", "writable": False, "error": str(exc)}
+
+    return report
+
+
+def _render_doctor(report: dict[str, Any]) -> str:
+    lines = ["# Workstream Doctor", "", f"Status: {report['status']}", ""]
+    lines.extend([
+        f"- Database: `{report['db_path']}`",
+        f"- Exports: `{report['export_dir']}`",
+        f"- Config: `{report['config_path']}` ({'present' if report['config_present'] else 'not present'})",
+        f"- Logs: `{report['log_dir']}`" if report.get("log_dir") else "- Logs: stdout only",
+        "",
+        "## Checks",
+    ])
+    for name, check in report["checks"].items():
+        lines.append(f"- {name}: {check.get('status')}")
+        if check.get("error"):
+            lines.append(f"  Error: {check['error']}")
+    return "\n".join(lines).strip() + "\n"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="workstream", description="Local workstream MCP server")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -139,8 +201,30 @@ def build_parser() -> argparse.ArgumentParser:
     capture.add_argument("--source")
     capture.add_argument("--project")
 
+    codex = sub.add_parser("record-codex-session", help="Record a Codex session from JSON")
+    codex.add_argument("--file", required=True, type=Path)
+    codex.add_argument("--project")
+    codex.add_argument("--repo-path")
+    codex.add_argument("--host")
+
+    brief = sub.add_parser("brief", help="Render a project brief for local agents such as OpenClaw")
+    brief.add_argument("project")
+    brief.add_argument("--format", choices=["markdown", "json"], default="markdown")
+
+    update_task = sub.add_parser("update-task", help="Update task status")
+    update_task.add_argument("task_id", type=int)
+    update_task.add_argument("--status", required=True, choices=["open", "blocked", "done"])
+
+    update_blocker = sub.add_parser("update-blocker", help="Update blocker status")
+    update_blocker.add_argument("blocker_id", type=int)
+    update_blocker.add_argument("--status", required=True, choices=["open", "resolved"])
+
+    doctor = sub.add_parser("doctor", help="Report local configuration and storage health")
+    doctor.add_argument("--format", choices=["markdown", "json"], default="markdown")
+
+    list_tasks = sub.add_parser("list-tasks", help="List active tasks")
+    list_tasks.add_argument("--project")
     sub.add_parser("list-projects", help="List projects")
-    sub.add_parser("list-tasks", help="List open tasks")
     sub.add_parser("recent", help="Show recent events")
     sub.add_parser("export-markdown", help="Export readable Markdown files")
 
@@ -167,11 +251,40 @@ def main(argv: list[str] | None = None) -> int:
             result = capture_handoff(**data, db_path=database.path)
             print(json.dumps(result, indent=2, sort_keys=True))
             return 0
+        if args.command == "record-codex-session":
+            data = _load_json_file(args.file)
+            if args.project:
+                data["project"] = args.project
+            if args.repo_path:
+                data["repo_path"] = args.repo_path
+            if args.host:
+                data["host"] = args.host
+            result = record_codex_session(**data, db_path=database.path)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+        if args.command == "brief":
+            print(render_project_brief(args.project, db_path=database.path, output_format=args.format))
+            return 0
+        if args.command == "update-task":
+            result = update_task_status(args.task_id, args.status, db_path=database.path)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+        if args.command == "update-blocker":
+            result = update_blocker_status(args.blocker_id, args.status, db_path=database.path)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+        if args.command == "doctor":
+            report = _doctor_report(database)
+            if args.format == "json":
+                print(json.dumps(report, indent=2, sort_keys=True))
+            else:
+                print(_render_doctor(report))
+            return 0 if report["status"] == "ok" else 1
         if args.command == "list-projects":
             print(render_projects(db_path=database.path))
             return 0
         if args.command == "list-tasks":
-            print(render_open_tasks(db_path=database.path))
+            print(render_open_tasks(db_path=database.path, project=args.project))
             return 0
         if args.command == "recent":
             print(render_recent(db_path=database.path))

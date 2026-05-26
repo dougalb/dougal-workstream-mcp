@@ -101,6 +101,16 @@ def create_mcp():
         )
 
     @mcp.tool()
+    def update_task_status(task_id: int, status: str) -> dict[str, Any]:
+        """Update a task status to open, blocked, or done."""
+        return tool_impl.update_task_status(task_id=task_id, status=status)
+
+    @mcp.tool()
+    def update_blocker_status(blocker_id: int, status: str) -> dict[str, Any]:
+        """Update a blocker status to open or resolved."""
+        return tool_impl.update_blocker_status(blocker_id=blocker_id, status=status)
+
+    @mcp.tool()
     def search_workstream(query: str, project: str | None = None, limit: int = 20) -> dict[str, Any]:
         """Search captured workstream content."""
         return tool_impl.search_workstream(query=query, project=project, limit=limit)
@@ -172,8 +182,11 @@ def create_http_app():
 
     async def healthz(_request):
         database = WorkstreamDB()
-        database.initialize()
-        return JSONResponse({"status": "ok", "database": str(database.path)})
+        return JSONResponse(database.health())
+
+    async def readyz(_request):
+        database = WorkstreamDB()
+        return JSONResponse(database.health())
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette):
@@ -183,6 +196,7 @@ def create_http_app():
     return Starlette(
         routes=[
             Route("/healthz", healthz, methods=["GET"]),
+            Route("/readyz", readyz, methods=["GET"]),
             Mount("/", app=mcp.streamable_http_app()),
         ],
         lifespan=lifespan,

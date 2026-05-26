@@ -20,7 +20,13 @@ def _empty(message: str) -> str:
 def _line_items(rows: list[dict[str, Any]], empty_message: str, field: str = "title") -> str:
     if not rows:
         return _empty(empty_message)
-    return "\n".join(f"- {row.get(field) or row.get('title')} ({row.get('created_at', '')})" for row in rows)
+    lines = []
+    for row in rows:
+        details = [row.get("created_at", "")]
+        if row.get("status") and row.get("status") != "open":
+            details.append(f"status: {row['status']}")
+        lines.append(f"- {row.get(field) or row.get('title')} ({', '.join(part for part in details if part)})")
+    return "\n".join(lines)
 
 
 def render_projects(db_path: str | Path | None = None) -> str:
@@ -64,8 +70,8 @@ def render_today(db_path: str | Path | None = None) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def render_open_tasks(db_path: str | Path | None = None) -> str:
-    tasks = _db(db_path).list_open_tasks()
+def render_open_tasks(db_path: str | Path | None = None, project: str | None = None) -> str:
+    tasks = _db(db_path).list_open_tasks(project=project)
     lines = ["# Open Workstream Tasks", ""]
     if not tasks:
         lines.append("_No open tasks._")
@@ -77,6 +83,8 @@ def render_open_tasks(db_path: str | Path | None = None) -> str:
             details.append(f"due: {task['due_date']}")
         if task.get("owner"):
             details.append(f"owner: {task['owner']}")
+        if task.get("status") and task["status"] != "open":
+            details.append(f"status: {task['status']}")
         lines.append(f"- **{task['title']}** ({', '.join(details)})")
         if task.get("description"):
             lines.append(f"  {task['description']}")
@@ -135,3 +143,29 @@ def render_project_blockers(project_id: str, db_path: str | Path | None = None) 
         return f"# Project Not Found\n\nNo project matched `{project_id}`.\n"
     lines = [f"# Blockers for {state['project']['name']}", "", _line_items(state["open_blockers"], "No open blockers.")]
     return "\n".join(lines).strip() + "\n"
+
+
+def project_state_for_json(project_id: str, db_path: str | Path | None = None) -> dict[str, Any] | None:
+    state = _db(db_path).project_state(project_id)
+    if state is None:
+        return None
+
+    for session in state["codex_sessions"]:
+        session["changed_files"] = json.loads(session.pop("changed_files_json") or "[]")
+        session["commands_run"] = json.loads(session.pop("commands_run_json") or "[]")
+    return state
+
+
+def render_project_json(project_id: str, db_path: str | Path | None = None) -> str:
+    state = project_state_for_json(project_id, db_path=db_path)
+    if state is None:
+        return json.dumps({"error": "project_not_found", "project": project_id}, indent=2, sort_keys=True) + "\n"
+    return json.dumps(state, indent=2, sort_keys=True) + "\n"
+
+
+def render_project_brief(project_id: str, db_path: str | Path | None = None, output_format: str = "markdown") -> str:
+    if output_format == "json":
+        return render_project_json(project_id, db_path=db_path)
+    if output_format != "markdown":
+        raise ValueError("Brief format must be markdown or json")
+    return render_project(project_id, db_path=db_path)

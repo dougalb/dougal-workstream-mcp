@@ -42,7 +42,7 @@ HTTP mode:
 workstream serve --transport http --host 0.0.0.0 --port 8000
 ```
 
-HTTP MCP is mounted at `http://localhost:8000/mcp`. The healthcheck is `http://localhost:8000/healthz`.
+HTTP MCP is mounted at `http://localhost:8000/mcp`. Health and readiness checks are available at `http://localhost:8000/healthz` and `http://localhost:8000/readyz`.
 
 ## Claude Desktop Example
 
@@ -68,11 +68,26 @@ HTTP MCP is mounted at `http://localhost:8000/mcp`. The healthcheck is `http://l
 - `record_task`
 - `record_codex_session`
 - `search_workstream`
+- `update_task_status`
+- `update_blocker_status`
 
 Example CLI capture:
 
 ```bash
 workstream capture --file examples/handoff.json --source chatgpt --project dougal-workstream-mcp
+```
+
+Additional v0.2 CLI commands:
+
+```bash
+workstream record-codex-session --file examples/codex-session.json
+workstream brief dougal-workstream-mcp
+workstream brief dougal-workstream-mcp --format json
+workstream update-task 1 --status blocked
+workstream update-task 1 --status done
+workstream update-blocker 1 --status resolved
+workstream doctor
+workstream doctor --format json
 ```
 
 ## Resources
@@ -121,6 +136,7 @@ Default compose mode runs HTTP MCP on port 8000:
 
 - MCP: `http://localhost:8000/mcp`
 - Health: `http://localhost:8000/healthz`
+- Readiness: `http://localhost:8000/readyz`
 
 To run stdio mode inside the container:
 
@@ -130,12 +146,12 @@ docker compose run --rm workstream-mcp workstream serve --transport stdio
 
 ## OpenClaw Consumption
 
-OpenClaw can consume this later in two ways:
+OpenClaw can consume this in two local-first ways:
 
 - as an MCP client reading `workstream://projects`, `workstream://recent`, and project resources directly.
-- through a small CLI/API bridge that shells out to `workstream recent`, `workstream list-tasks`, or queries the SQLite database read-only.
+- through the read-only CLI bridge command `workstream brief PROJECT --format json` or `workstream brief PROJECT`.
 
-For v0.1, no public internet exposure is implemented.
+For v0.2, no public internet exposure is implemented.
 
 ## Security Model
 
@@ -153,3 +169,15 @@ Limitations:
 - There is no multi-user auth model in v0.1.
 - HTTP mode is intended for trusted local/container networks only.
 - Markdown exports inherit the sensitivity of stored content and should be treated as local working files.
+
+
+## v0.2 Notes
+
+v0.2 focuses on proving real cross-agent consumption rather than broadening hosting scope. It adds:
+
+- project briefs for OpenClaw/local bridge consumption.
+- CLI ingestion of Codex session JSON.
+- task status transitions: `open`, `blocked`, `done`.
+- blocker status transitions: `open`, `resolved`.
+- `workstream doctor` for local diagnostics.
+- richer HTTP health/readiness checks.

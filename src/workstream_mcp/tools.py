@@ -316,3 +316,37 @@ def search_workstream(
     assert_safe_to_store({"query": query, "project": project})
     database = _db(db_path)
     return {"results": database.search(query=query, project=project, limit=limit)}
+
+
+def update_task_status(
+    task_id: int,
+    status: str,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    assert_safe_to_store({"task_id": task_id, "status": status})
+    database = _db(db_path)
+    row = database.update_task_status(task_id=task_id, status=status)
+    return {
+        "task_id": row["id"],
+        "project_id": row["project_id"],
+        "project_slug": row["project_slug"],
+        "status": row["status"],
+        "event_id": row["event_id"],
+    }
+
+
+def update_blocker_status(
+    blocker_id: int,
+    status: str,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    assert_safe_to_store({"blocker_id": blocker_id, "status": status})
+    database = _db(db_path)
+    row = database.update_blocker_status(blocker_id=blocker_id, status=status)
+    return {
+        "blocker_id": row["id"],
+        "project_id": row["project_id"],
+        "project_slug": row["project_slug"],
+        "status": row["status"],
+        "event_id": row["event_id"],
+    }
