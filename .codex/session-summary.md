@@ -64,3 +64,33 @@ Project: dougal-workstream-mcp
 - Real Claude Desktop/MCP Inspector client validation is still manual.
 - OpenClaw bridge integration is represented by CLI brief output but no OpenClaw-specific adapter has been added.
 - No public exposure, hosted auth, sync engine, or multi-user permission model has been added.
+
+
+# v0.3 Session Summary
+
+## What Was Built
+
+- Bumped package version to `0.3.0`.
+- Added OAuth resource-server configuration and Bearer JWT verification for public deployments behind an external proxy.
+- Added unauthenticated `/.well-known/oauth-protected-resource` metadata.
+- Added `/sse` and `/messages/` SSE compatibility alongside `/mcp`.
+- Added ChatGPT Apps SDK-safe tools: `list_projects`, `list_open_tasks`, `get_project_brief`, and a redacted `search_workstream`.
+- Added tool `securitySchemes`, mirrored `_meta.securitySchemes`, output schemas, and required tool annotations.
+- Added a minimal Apps SDK component resource at `ui://widget/project-brief-v1.html`.
+- Added safe structured-output redaction for sensitive rows, local paths, command history, and secret-like values.
+- Updated Docker/Compose defaults for localhost-only port binding and proxy-aware environment variables.
+- Added `docs/public-proxy-contract.md` and `examples/nginx-stack-codex-prompt.md` for the external NGINX stack.
+
+## Verification
+
+- Syntax check passed with `python -m compileall src tests` in `/tmp/dougal-workstream-mcp-venv`.
+- Unit tests passed: 21 tests.
+- Docker Compose config validation passed.
+- HTTP smoke checks passed for `/healthz`, `/readyz`, `/.well-known/oauth-protected-resource`, and `/sse`.
+- Docker image build passed for `dougal-workstream-mcp:test`.
+
+## Remaining Gaps
+
+- The OAuth provider itself is external and must be configured separately.
+- NGINX/certificate automation is intentionally outside this repo.
+- ChatGPT developer-mode connection and MCP Inspector OAuth flow still need live validation against the chosen public domain and identity provider.

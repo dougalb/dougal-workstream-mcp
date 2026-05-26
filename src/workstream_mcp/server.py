@@ -3,15 +3,161 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
+from . import app_tools as app_tool_impl
 from . import prompts as prompt_templates
 from . import resources as resource_renderers
 from . import tools as tool_impl
-from .config import configure_logging
+from .auth import JWTTokenVerifier, READ_SCOPE, WRITE_SCOPE, oauth_challenge, protected_resource_metadata
+from .auth import reset_current_access_token, set_current_access_token
+from .config import WorkstreamConfig, configure_logging, load_config
 from .db import WorkstreamDB
 
+PROJECT_BRIEF_WIDGET_URI = "ui://widget/project-brief-v1.html"
 
-def create_mcp():
+OBJECT_OUTPUT_SCHEMA = {"type": "object", "additionalProperties": True}
+PROJECTS_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {"projects": {"type": "array", "items": {"type": "object", "additionalProperties": True}}},
+    "required": ["projects"],
+    "additionalProperties": True,
+}
+TASKS_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {"tasks": {"type": "array", "items": {"type": "object", "additionalProperties": True}}},
+    "required": ["tasks"],
+    "additionalProperties": True,
+}
+SEARCH_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {"results": {"type": "array", "items": {"type": "object", "additionalProperties": True}}},
+    "required": ["results"],
+    "additionalProperties": True,
+}
+
+
+class WorkstreamOAuthMiddleware:
+    def __init__(self, app, config: WorkstreamConfig):
+        self.app = app
+        self.config = config
+        self.verifier = JWTTokenVerifier(config) if config.auth_mode == "oauth" else None
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or self.verifier is None or not self._protected(scope.get("path", "")):
+            await self.app(scope, receive, send)
+            return
+
+        from starlette.responses import JSONResponse
+
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        authorization = headers.get(b"authorization", b"").decode("utf-8")
+        token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+        access_token = await self.verifier.verify_token(token) if token else None
+        if access_token is None or READ_SCOPE not in set(access_token.scopes):
+            challenge = oauth_challenge(self.config)
+            response = JSONResponse(
+                {"error": "unauthorized", "detail": "OAuth bearer token with workstream.read scope is required."},
+                status_code=401,
+                headers={"WWW-Authenticate": challenge.header_value()},
+            )
+            await response(scope, receive, send)
+            return
+
+        token_context = set_current_access_token(access_token)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_current_access_token(token_context)
+
+    @staticmethod
+    def _protected(path: str) -> bool:
+        return path == "/mcp" or path == "/sse" or path.startswith("/messages")
+
+
+def _annotations(read_only: bool):
+    from mcp.types import ToolAnnotations
+
+    return ToolAnnotations(readOnlyHint=read_only, destructiveHint=False, openWorldHint=False)
+
+
+def _security_schemes(config: WorkstreamConfig, scopes: list[str]) -> list[dict[str, Any]]:
+    if config.auth_mode == "oauth":
+        return [{"type": "oauth2", "scopes": scopes}]
+    return [{"type": "noauth"}]
+
+
+def _tool_meta(
+    config: WorkstreamConfig,
+    scopes: list[str],
+    output_schema: dict[str, Any] | None = None,
+    widget: bool = False,
+) -> dict[str, Any]:
+    meta: dict[str, Any] = {"securitySchemes": _security_schemes(config, scopes)}
+    if output_schema is not None:
+        meta["workstream/outputSchema"] = output_schema
+    if widget:
+        meta["openai/outputTemplate"] = PROJECT_BRIEF_WIDGET_URI
+        meta["ui"] = {"resourceUri": PROJECT_BRIEF_WIDGET_URI, "visibility": ["model", "app"]}
+    return meta
+
+
+def _widget_html() -> str:
+    return """
+<div id="workstream-root">Loading workstream brief...</div>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #workstream-root { padding: 12px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  ul { margin: 8px 0 0; padding-left: 18px; }
+  li { margin: 4px 0; }
+</style>
+<script type="module">
+const root = document.getElementById("workstream-root");
+function render(result) {
+  const data = result?.structuredContent;
+  if (!data?.project) {
+    root.textContent = "No project brief available.";
+    return;
+  }
+  const tasks = data.open_tasks ?? [];
+  const blockers = data.open_blockers ?? [];
+  root.innerHTML = `
+    <h2>${data.project.name}</h2>
+    <div>${tasks.length} open tasks, ${blockers.length} open blockers</div>
+    <ul>${tasks.slice(0, 6).map((task) => `<li>${task.title}</li>`).join("")}</ul>
+  `;
+}
+window.addEventListener("message", (event) => {
+  if (event.source !== window.parent) return;
+  const message = event.data;
+  if (message?.method === "ui/notifications/tool-result") render(message.params);
+}, { passive: true });
+</script>
+""".strip()
+
+
+def _create_fastmcp_class():
     from mcp.server.fastmcp import FastMCP
+
+    class WorkstreamFastMCP(FastMCP):
+        async def list_tools(self):
+            tools = await super().list_tools()
+            for tool in tools:
+                meta = dict(tool.meta or {})
+                output_schema = meta.pop("workstream/outputSchema", None)
+                if output_schema is not None:
+                    tool.outputSchema = output_schema
+                if meta.get("securitySchemes"):
+                    tool.securitySchemes = meta["securitySchemes"]
+                tool.meta = meta or None
+            return tools
+
+    return WorkstreamFastMCP
+
+
+def create_mcp(config: WorkstreamConfig | None = None):
+    config = config or load_config()
+    FastMCP = _create_fastmcp_class()
 
     mcp = FastMCP(
         "dougal-workstream-mcp",
@@ -20,7 +166,7 @@ def create_mcp():
         json_response=True,
     )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def capture_handoff(
         source: str,
         project: str,
@@ -45,7 +191,7 @@ def create_mcp():
             sensitivity=sensitivity,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def record_decision(
         project: str,
         title: str,
@@ -56,7 +202,7 @@ def create_mcp():
         """Record a project decision."""
         return tool_impl.record_decision(project, title, summary, rationale, sensitivity)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def record_task(
         project: str,
         title: str,
@@ -69,7 +215,7 @@ def create_mcp():
         """Record an open task."""
         return tool_impl.record_task(project, title, description, priority, due_date, owner, sensitivity)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def record_codex_session(
         project: str,
         repo_path: str,
@@ -100,20 +246,50 @@ def create_mcp():
             sensitivity=sensitivity,
         )
 
-    @mcp.tool()
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def update_task_status(task_id: int, status: str) -> dict[str, Any]:
         """Update a task status to open, blocked, or done."""
         return tool_impl.update_task_status(task_id=task_id, status=status)
 
-    @mcp.tool()
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def update_blocker_status(blocker_id: int, status: str) -> dict[str, Any]:
         """Update a blocker status to open or resolved."""
         return tool_impl.update_blocker_status(blocker_id=blocker_id, status=status)
 
-    @mcp.tool()
-    def search_workstream(query: str, project: str | None = None, limit: int = 20) -> dict[str, Any]:
+    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], SEARCH_OUTPUT_SCHEMA))
+    def search_workstream(query: str, project: str | None = None, limit: int = 20):
         """Search captured workstream content."""
-        return tool_impl.search_workstream(query=query, project=project, limit=limit)
+        return app_tool_impl.search_workstream(query=query, project=project, limit=limit)
+
+    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], PROJECTS_OUTPUT_SCHEMA))
+    def list_projects():
+        """List projects in an Apps SDK-safe structured format."""
+        return app_tool_impl.list_projects()
+
+    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], TASKS_OUTPUT_SCHEMA))
+    def list_open_tasks(project: str | None = None):
+        """List open workstream tasks in an Apps SDK-safe structured format."""
+        return app_tool_impl.list_open_tasks(project=project)
+
+    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], OBJECT_OUTPUT_SCHEMA, widget=True))
+    def get_project_brief(project: str):
+        """Return an Apps SDK-safe project brief."""
+        return app_tool_impl.get_project_brief(project=project)
+
+    @mcp.resource(
+        PROJECT_BRIEF_WIDGET_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta={
+            "ui": {
+                "prefersBorder": True,
+                "domain": config.public_base_url,
+                "csp": {"connectDomains": [config.public_base_url], "resourceDomains": []},
+            }
+        },
+    )
+    def project_brief_widget() -> str:
+        """Minimal ChatGPT Apps SDK project brief widget."""
+        return _widget_html()
 
     @mcp.resource("workstream://today", mime_type="text/markdown")
     def today() -> str:
@@ -173,20 +349,27 @@ def create_mcp():
     return mcp
 
 
-def create_http_app():
+def create_http_app(config: WorkstreamConfig | None = None):
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse
-    from starlette.routing import Mount, Route
+    from starlette.routing import Route
+    from starlette.middleware import Middleware
 
-    mcp = create_mcp()
+    config = config or load_config()
+    mcp = create_mcp(config)
+    streamable_app = mcp.streamable_http_app()
+    sse_app = mcp.sse_app()
 
     async def healthz(_request):
-        database = WorkstreamDB()
+        database = WorkstreamDB(config.db_path)
         return JSONResponse(database.health())
 
     async def readyz(_request):
-        database = WorkstreamDB()
+        database = WorkstreamDB(config.db_path)
         return JSONResponse(database.health())
+
+    async def oauth_resource_metadata(_request):
+        return JSONResponse(protected_resource_metadata(config))
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette):
@@ -197,24 +380,35 @@ def create_http_app():
         routes=[
             Route("/healthz", healthz, methods=["GET"]),
             Route("/readyz", readyz, methods=["GET"]),
-            Mount("/", app=mcp.streamable_http_app()),
+            Route("/.well-known/oauth-protected-resource", oauth_resource_metadata, methods=["GET"]),
+            *streamable_app.routes,
+            *sse_app.routes,
         ],
+        middleware=[Middleware(WorkstreamOAuthMiddleware, config=config)],
         lifespan=lifespan,
     )
 
 
 def run_stdio() -> None:
-    configure_logging()
-    WorkstreamDB().initialize()
-    create_mcp().run(transport="stdio")
+    config = load_config()
+    configure_logging(config)
+    WorkstreamDB(config.db_path).initialize()
+    create_mcp(config).run(transport="stdio")
 
 
 def run_http(host: str = "0.0.0.0", port: int = 8000) -> None:
-    configure_logging()
-    WorkstreamDB().initialize()
+    config = load_config()
+    configure_logging(config)
+    WorkstreamDB(config.db_path).initialize()
     import uvicorn
 
-    uvicorn.run(create_http_app(), host=host, port=port)
+    uvicorn.run(
+        create_http_app(config),
+        host=host,
+        port=port,
+        proxy_headers=config.trust_proxy_headers,
+        forwarded_allow_ips="*" if config.trust_proxy_headers else None,
+    )
 
 
 def main() -> None:

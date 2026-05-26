@@ -4,7 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     WORKSTREAM_DB_PATH=/data/workstream.db \
     WORKSTREAM_EXPORT_DIR=/exports \
-    WORKSTREAM_CONFIG_PATH=/config/workstream.yaml
+    WORKSTREAM_CONFIG_PATH=/config/workstream.yaml \
+    WORKSTREAM_PUBLIC_BASE_URL=http://localhost:8000 \
+    WORKSTREAM_TRUST_PROXY_HEADERS=false
 
 WORKDIR /app
 

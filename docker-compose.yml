@@ -1,14 +1,16 @@
 services:
   workstream-mcp:
     build: .
-    image: dougal-workstream-mcp:0.2
+    image: dougal-workstream-mcp:0.3
     container_name: workstream-mcp
     environment:
       WORKSTREAM_DB_PATH: /data/workstream.db
       WORKSTREAM_EXPORT_DIR: /exports
       WORKSTREAM_CONFIG_PATH: /config/workstream.yaml
+      WORKSTREAM_PUBLIC_BASE_URL: http://localhost:8000
+      WORKSTREAM_TRUST_PROXY_HEADERS: "false"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - workstream-data:/data
       - ./exports:/exports

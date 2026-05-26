@@ -592,27 +592,27 @@ class WorkstreamDB:
             f"""
             SELECT * FROM (
                 SELECT 'event' AS kind, e.id AS id, p.slug AS project, e.title AS title,
-                       e.summary AS snippet, e.created_at AS created_at
+                       e.summary AS snippet, e.created_at AS created_at, e.sensitivity AS sensitivity
                 FROM events e JOIN projects p ON p.id = e.project_id
                 WHERE (e.title LIKE ? OR e.summary LIKE ?){project_clause}
                 UNION ALL
-                SELECT 'task', t.id, p.slug, t.title, t.description, t.created_at
+                SELECT 'task', t.id, p.slug, t.title, t.description, t.created_at, t.sensitivity
                 FROM tasks t JOIN projects p ON p.id = t.project_id
                 WHERE (t.title LIKE ? OR t.description LIKE ?){project_clause}
                 UNION ALL
-                SELECT 'decision', d.id, p.slug, d.title, d.summary, d.created_at
+                SELECT 'decision', d.id, p.slug, d.title, d.summary, d.created_at, d.sensitivity
                 FROM decisions d JOIN projects p ON p.id = d.project_id
                 WHERE (d.title LIKE ? OR d.summary LIKE ? OR d.rationale LIKE ?){project_clause}
                 UNION ALL
-                SELECT 'blocker', b.id, p.slug, b.title, b.description, b.created_at
+                SELECT 'blocker', b.id, p.slug, b.title, b.description, b.created_at, b.sensitivity
                 FROM blockers b JOIN projects p ON p.id = b.project_id
                 WHERE (b.title LIKE ? OR b.description LIKE ?){project_clause}
                 UNION ALL
-                SELECT 'reference', r.id, p.slug, COALESCE(r.label, r.uri), r.description, r.created_at
+                SELECT 'reference', r.id, p.slug, COALESCE(r.label, r.uri), r.description, r.created_at, r.sensitivity
                 FROM "references" r JOIN projects p ON p.id = r.project_id
                 WHERE (r.uri LIKE ? OR r.label LIKE ? OR r.description LIKE ?){project_clause}
                 UNION ALL
-                SELECT 'codex_session', c.id, p.slug, c.goal, c.tests_summary, c.created_at
+                SELECT 'codex_session', c.id, p.slug, c.goal, c.tests_summary, c.created_at, c.sensitivity
                 FROM codex_sessions c JOIN projects p ON p.id = c.project_id
                 WHERE (c.goal LIKE ? OR c.status LIKE ? OR c.tests_summary LIKE ?
                        OR c.changed_files_json LIKE ? OR c.commands_run_json LIKE ?){project_clause}

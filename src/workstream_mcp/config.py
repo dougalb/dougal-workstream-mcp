@@ -13,6 +13,15 @@ class WorkstreamConfig:
     export_dir: Path
     config_path: Path
     log_dir: Path | None
+    public_base_url: str
+    auth_mode: str
+    oauth_issuer: str | None
+    oauth_audience: str | None
+    oauth_jwks_url: str | None
+    oauth_authorization_url: str | None
+    oauth_token_url: str | None
+    oauth_client_id: str | None
+    trust_proxy_headers: bool
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:
@@ -29,6 +38,25 @@ def _read_config_file(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         return {}
     return data
+
+
+def _config_value(file_config: dict[str, Any], env_name: str, key: str, default: Any = None) -> Any:
+    return os.environ.get(env_name, file_config.get(key, default))
+
+
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _clean_url(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text.rstrip("/") if text else None
 
 
 def load_config() -> WorkstreamConfig:
@@ -49,12 +77,31 @@ def load_config() -> WorkstreamConfig:
     )
     log_dir_value = os.environ.get("WORKSTREAM_LOG_DIR", file_config.get("log_dir"))
     log_dir = Path(log_dir_value) if log_dir_value else None
+    auth_mode = str(_config_value(file_config, "WORKSTREAM_AUTH_MODE", "auth_mode", "none")).strip().lower()
+    if auth_mode not in {"none", "oauth"}:
+        auth_mode = "none"
 
     return WorkstreamConfig(
         db_path=db_path,
         export_dir=export_dir,
         config_path=config_path,
         log_dir=log_dir,
+        public_base_url=(
+            _clean_url(_config_value(file_config, "WORKSTREAM_PUBLIC_BASE_URL", "public_base_url", "http://localhost:8000"))
+            or "http://localhost:8000"
+        ),
+        auth_mode=auth_mode,
+        oauth_issuer=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_ISSUER", "oauth_issuer")),
+        oauth_audience=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_AUDIENCE", "oauth_audience")),
+        oauth_jwks_url=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_JWKS_URL", "oauth_jwks_url")),
+        oauth_authorization_url=_clean_url(
+            _config_value(file_config, "WORKSTREAM_OAUTH_AUTHORIZATION_URL", "oauth_authorization_url")
+        ),
+        oauth_token_url=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_TOKEN_URL", "oauth_token_url")),
+        oauth_client_id=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_CLIENT_ID", "oauth_client_id")),
+        trust_proxy_headers=_as_bool(
+            _config_value(file_config, "WORKSTREAM_TRUST_PROXY_HEADERS", "trust_proxy_headers", False)
+        ),
     )
 
 

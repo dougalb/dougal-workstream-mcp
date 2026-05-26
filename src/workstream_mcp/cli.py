@@ -147,7 +147,18 @@ def _doctor_report(database: WorkstreamDB) -> dict[str, Any]:
         "log_dir": str(config.log_dir) if config.log_dir else None,
         "environment": {
             key: os.environ.get(key)
-            for key in ["WORKSTREAM_DB_PATH", "WORKSTREAM_EXPORT_DIR", "WORKSTREAM_CONFIG_PATH", "WORKSTREAM_LOG_DIR"]
+            for key in [
+                "WORKSTREAM_DB_PATH",
+                "WORKSTREAM_EXPORT_DIR",
+                "WORKSTREAM_CONFIG_PATH",
+                "WORKSTREAM_LOG_DIR",
+                "WORKSTREAM_PUBLIC_BASE_URL",
+                "WORKSTREAM_TRUST_PROXY_HEADERS",
+                "WORKSTREAM_AUTH_MODE",
+                "WORKSTREAM_OAUTH_ISSUER",
+                "WORKSTREAM_OAUTH_AUDIENCE",
+                "WORKSTREAM_OAUTH_JWKS_URL",
+            ]
             if os.environ.get(key)
         },
         "checks": {},

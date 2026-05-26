@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .auth import WRITE_SCOPE, require_scope
 from .db import WorkstreamDB
 from .safety import assert_safe_to_store
 
@@ -50,6 +51,7 @@ def capture_handoff(
     sensitivity: str = "internal",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    require_scope(WRITE_SCOPE)
     payload = {
         "source": source,
         "project": project,
@@ -144,6 +146,7 @@ def record_decision(
     sensitivity: str = "internal",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    require_scope(WRITE_SCOPE)
     payload = locals().copy()
     payload.pop("db_path", None)
     assert_safe_to_store(payload)
@@ -178,6 +181,7 @@ def record_task(
     sensitivity: str = "internal",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    require_scope(WRITE_SCOPE)
     payload = locals().copy()
     payload.pop("db_path", None)
     assert_safe_to_store(payload)
@@ -219,6 +223,7 @@ def record_codex_session(
     sensitivity: str = "internal",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    require_scope(WRITE_SCOPE)
     payload = {
         "project": project,
         "repo_path": repo_path,
@@ -323,6 +328,7 @@ def update_task_status(
     status: str,
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    require_scope(WRITE_SCOPE)
     assert_safe_to_store({"task_id": task_id, "status": status})
     database = _db(db_path)
     row = database.update_task_status(task_id=task_id, status=status)
@@ -340,6 +346,7 @@ def update_blocker_status(
     status: str,
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    require_scope(WRITE_SCOPE)
     assert_safe_to_store({"blocker_id": blocker_id, "status": status})
     database = _db(db_path)
     row = database.update_blocker_status(blocker_id=blocker_id, status=status)
