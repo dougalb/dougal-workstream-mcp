@@ -156,6 +156,8 @@ def _create_fastmcp_class():
 
 
 def create_mcp(config: WorkstreamConfig | None = None):
+    from mcp.server.transport_security import TransportSecuritySettings
+
     config = config or load_config()
     FastMCP = _create_fastmcp_class()
 
@@ -164,6 +166,7 @@ def create_mcp(config: WorkstreamConfig | None = None):
         instructions="Local-first shared workstream context backed by SQLite.",
         stateless_http=True,
         json_response=True,
+        transport_security=TransportSecuritySettings(allowed_hosts=config.allowed_hosts),
     )
 
     @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))

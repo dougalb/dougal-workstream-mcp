@@ -12,7 +12,7 @@ from starlette.testclient import TestClient
 
 from workstream_mcp import app_tools
 from workstream_mcp.auth import READ_SCOPE, SENSITIVE_SCOPE, WRITE_SCOPE, JWTTokenVerifier, set_current_access_token
-from workstream_mcp.config import WorkstreamConfig
+from workstream_mcp.config import WorkstreamConfig, load_config
 from workstream_mcp.cli import _load_capture_file, main
 from workstream_mcp.db import WorkstreamDB
 from workstream_mcp.export import export_markdown
@@ -56,6 +56,7 @@ def _oauth_config(tmp_path: Path) -> tuple[WorkstreamConfig, rsa.RSAPrivateKey]:
         oauth_token_url="https://auth.example.test/token",
         oauth_client_id=None,
         trust_proxy_headers=True,
+        allowed_hosts=["workstream.example.test"],
     )
     return config, key
 
@@ -347,6 +348,26 @@ def test_http_app_exposes_health_and_ready_routes() -> None:
     assert "/sse" in paths
     assert "/messages" in paths
     assert "/.well-known/oauth-protected-resource" in paths
+
+
+def test_config_derives_and_accepts_allowed_hosts(tmp_path: Path, monkeypatch) -> None:
+    from workstream_mcp.server import create_http_app
+
+    monkeypatch.setenv("WORKSTREAM_CONFIG_PATH", str(tmp_path / "missing.yaml"))
+    monkeypatch.setenv("WORKSTREAM_DB_PATH", str(tmp_path / "workstream.db"))
+    monkeypatch.setenv("WORKSTREAM_EXPORT_DIR", str(tmp_path / "exports"))
+    monkeypatch.setenv("WORKSTREAM_PUBLIC_BASE_URL", "http://10.10.10.20:8000")
+    monkeypatch.setenv("WORKSTREAM_ALLOWED_HOSTS", "mcpgw.dmz.dougal.io,mcpgw.dmz.dougal.io:443")
+
+    config = load_config()
+    assert "10.10.10.20:8000" in config.allowed_hosts
+    assert "10.10.10.20" in config.allowed_hosts
+    assert "mcpgw.dmz.dougal.io" in config.allowed_hosts
+    assert "mcpgw.dmz.dougal.io:443" in config.allowed_hosts
+
+    with TestClient(create_http_app(config)) as client:
+        response = client.get("/mcp", headers={"host": "10.10.10.20:8000"})
+    assert response.status_code != 421
 
 
 def test_cli_init_capture_and_list(tmp_path: Path, monkeypatch) -> None:

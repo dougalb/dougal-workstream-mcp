@@ -37,6 +37,8 @@ Preserve these request headers:
 
 Set `WORKSTREAM_PUBLIC_BASE_URL` to the public HTTPS origin, for example `https://workstream.example.com`.
 
+Set `WORKSTREAM_ALLOWED_HOSTS` to every Host header value the app should accept, including the public host and any private direct-test hostnames or IPs. The public base URL host is included automatically, but explicit values are useful during private E2E testing.
+
 Set `WORKSTREAM_TRUST_PROXY_HEADERS=true` only when the proxy is trusted and forwards correct `X-Forwarded-*` headers.
 
 ## Streaming Requirements

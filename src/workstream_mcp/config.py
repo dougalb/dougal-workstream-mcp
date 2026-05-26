@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class WorkstreamConfig:
     oauth_token_url: str | None
     oauth_client_id: str | None
     trust_proxy_headers: bool
+    allowed_hosts: list[str]
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:
@@ -59,6 +61,26 @@ def _clean_url(value: Any) -> str | None:
     return text.rstrip("/") if text else None
 
 
+def _as_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
+
+def _host_values(public_base_url: str) -> list[str]:
+    parsed = urlparse(public_base_url)
+    netloc = parsed.netloc
+    hostname = parsed.hostname
+    values = ["localhost", "localhost:8000", "127.0.0.1", "127.0.0.1:8000"]
+    if netloc:
+        values.append(netloc)
+    if hostname:
+        values.append(hostname)
+    return list(dict.fromkeys(values))
+
+
 def load_config() -> WorkstreamConfig:
     config_path = Path(os.environ.get("WORKSTREAM_CONFIG_PATH", "/config/workstream.yaml"))
     file_config = _read_config_file(config_path)
@@ -81,15 +103,19 @@ def load_config() -> WorkstreamConfig:
     if auth_mode not in {"none", "oauth"}:
         auth_mode = "none"
 
+    public_base_url = (
+        _clean_url(_config_value(file_config, "WORKSTREAM_PUBLIC_BASE_URL", "public_base_url", "http://localhost:8000"))
+        or "http://localhost:8000"
+    )
+    allowed_hosts = _host_values(public_base_url)
+    allowed_hosts.extend(_as_list(_config_value(file_config, "WORKSTREAM_ALLOWED_HOSTS", "allowed_hosts")))
+
     return WorkstreamConfig(
         db_path=db_path,
         export_dir=export_dir,
         config_path=config_path,
         log_dir=log_dir,
-        public_base_url=(
-            _clean_url(_config_value(file_config, "WORKSTREAM_PUBLIC_BASE_URL", "public_base_url", "http://localhost:8000"))
-            or "http://localhost:8000"
-        ),
+        public_base_url=public_base_url,
         auth_mode=auth_mode,
         oauth_issuer=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_ISSUER", "oauth_issuer")),
         oauth_audience=_clean_url(_config_value(file_config, "WORKSTREAM_OAUTH_AUDIENCE", "oauth_audience")),
@@ -102,6 +128,7 @@ def load_config() -> WorkstreamConfig:
         trust_proxy_headers=_as_bool(
             _config_value(file_config, "WORKSTREAM_TRUST_PROXY_HEADERS", "trust_proxy_headers", False)
         ),
+        allowed_hosts=list(dict.fromkeys(allowed_hosts)),
     )
 
 

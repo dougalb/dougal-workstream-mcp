@@ -27,6 +27,7 @@ export WORKSTREAM_EXPORT_DIR=/path/to/exports
 export WORKSTREAM_CONFIG_PATH=/path/to/workstream.yaml
 export WORKSTREAM_LOG_DIR=/path/to/logs
 export WORKSTREAM_PUBLIC_BASE_URL=http://localhost:8000
+export WORKSTREAM_ALLOWED_HOSTS=localhost,localhost:8000,127.0.0.1,127.0.0.1:8000
 export WORKSTREAM_TRUST_PROXY_HEADERS=false
 ```
 
@@ -175,6 +176,7 @@ OAuth mode uses an external OAuth/OIDC provider. The app is only a resource serv
 ```bash
 export WORKSTREAM_AUTH_MODE=oauth
 export WORKSTREAM_PUBLIC_BASE_URL=https://workstream.example.com
+export WORKSTREAM_ALLOWED_HOSTS=workstream.example.com
 export WORKSTREAM_TRUST_PROXY_HEADERS=true
 export WORKSTREAM_OAUTH_ISSUER=https://auth.example.com
 export WORKSTREAM_OAUTH_AUDIENCE=https://workstream.example.com
