@@ -67,9 +67,17 @@ HTTP MCP is mounted at `http://localhost:8000/mcp`. SSE compatibility is availab
 ## Tools
 
 - `capture_handoff`
+- `record_session_handoff`
 - `record_decision`
+- `record_chatgpt_decision`
 - `record_task`
+- `record_openclaw_followup`
 - `record_codex_session`
+- `record_codex_session_summary`
+- `list_recent_changes_since`
+- `mark_event_consumed_by_agent`
+- `get_agent_digest`
+- `create_or_update_project_brief`
 - `search_workstream`
 - `update_task_status`
 - `update_blocker_status`
@@ -114,6 +122,15 @@ workstream doctor --format json
 - `project_brief`
 
 Codex should call `record_codex_session` at the end of meaningful work with the repo path, host, goal, status, changed files, commands run, tests summary, decisions, next actions, blockers, and sensitivity. `examples/codex-session.json` shows the intended shape.
+
+For cross-agent coordination, prefer the newer Workstreams-native commands:
+
+- ChatGPT and Claude planning sessions: `record_session_handoff` and `record_chatgpt_decision`.
+- Codex implementation sessions: `record_codex_session_summary`.
+- OpenClaw follow-up work: `record_openclaw_followup`, `get_agent_digest`, `list_recent_changes_since`, and `mark_event_consumed_by_agent`.
+- Project state refreshes: `create_or_update_project_brief`.
+
+See `docs/cross-agent-coordination.md` for the event model, consumption cursor behavior, and example workflows.
 
 ## Markdown Export
 

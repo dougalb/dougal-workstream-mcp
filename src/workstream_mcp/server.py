@@ -33,6 +33,22 @@ SEARCH_OUTPUT_SCHEMA = {
     "required": ["results"],
     "additionalProperties": True,
 }
+EVENTS_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {"events": {"type": "array", "items": {"type": "object", "additionalProperties": True}}},
+    "required": ["events"],
+    "additionalProperties": True,
+}
+DIGEST_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "unconsumed_events": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "assigned_open_tasks": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "open_blockers": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+    },
+    "required": ["unconsumed_events", "assigned_open_tasks", "open_blockers"],
+    "additionalProperties": True,
+}
 
 
 class WorkstreamOAuthMiddleware:
@@ -195,6 +211,37 @@ def create_mcp(config: WorkstreamConfig | None = None):
         )
 
     @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    def record_session_handoff(
+        project: str,
+        source: str,
+        title: str,
+        summary: str,
+        decisions: list[Any] | None = None,
+        tasks: list[Any] | None = None,
+        blockers: list[Any] | None = None,
+        references: list[Any] | None = None,
+        next_actions: list[Any] | None = None,
+        open_questions: list[Any] | None = None,
+        sensitivity: str = "internal",
+        source_agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Record a durable cross-agent session handoff without storing a full chat transcript."""
+        return tool_impl.record_session_handoff(
+            project=project,
+            source=source,
+            title=title,
+            summary=summary,
+            decisions=decisions,
+            tasks=tasks,
+            blockers=blockers,
+            references=references,
+            next_actions=next_actions,
+            open_questions=open_questions,
+            sensitivity=sensitivity,
+            source_agent=source_agent,
+        )
+
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def record_decision(
         project: str,
         title: str,
@@ -204,6 +251,31 @@ def create_mcp(config: WorkstreamConfig | None = None):
     ) -> dict[str, Any]:
         """Record a project decision."""
         return tool_impl.record_decision(project, title, summary, rationale, sensitivity)
+
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    def record_chatgpt_decision(
+        project: str,
+        title: str,
+        summary: str,
+        rationale: str,
+        alternatives_considered: list[Any] | None = None,
+        implications: list[Any] | None = None,
+        sensitivity: str = "internal",
+        supersedes_event_id: int | None = None,
+        source_agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Record a durable decision made in a ChatGPT planning or design session."""
+        return tool_impl.record_chatgpt_decision(
+            project=project,
+            title=title,
+            summary=summary,
+            rationale=rationale,
+            alternatives_considered=alternatives_considered,
+            implications=implications,
+            sensitivity=sensitivity,
+            supersedes_event_id=supersedes_event_id,
+            source_agent=source_agent,
+        )
 
     @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def record_task(
@@ -217,6 +289,31 @@ def create_mcp(config: WorkstreamConfig | None = None):
     ) -> dict[str, Any]:
         """Record an open task."""
         return tool_impl.record_task(project, title, description, priority, due_date, owner, sensitivity)
+
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    def record_openclaw_followup(
+        project: str,
+        title: str,
+        description: str,
+        priority: str,
+        due_date: str | None = None,
+        assigned_agent: str | None = "any-openclaw",
+        context: str = "",
+        references: list[Any] | None = None,
+        sensitivity: str = "internal",
+    ) -> dict[str, Any]:
+        """Create a structured follow-up task intended for OpenClaw or a named OpenClaw agent."""
+        return tool_impl.record_openclaw_followup(
+            project=project,
+            title=title,
+            description=description,
+            priority=priority,
+            due_date=due_date,
+            assigned_agent=assigned_agent,
+            context=context,
+            references=references,
+            sensitivity=sensitivity,
+        )
 
     @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def record_codex_session(
@@ -250,6 +347,41 @@ def create_mcp(config: WorkstreamConfig | None = None):
         )
 
     @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    def record_codex_session_summary(
+        project: str,
+        title: str,
+        summary: str,
+        files_changed: list[Any] | None = None,
+        commands_run: list[Any] | None = None,
+        tests_run: list[Any] | None = None,
+        implementation_notes: list[Any] | None = None,
+        decisions: list[Any] | None = None,
+        tasks_created: list[Any] | None = None,
+        blockers: list[Any] | None = None,
+        followups: list[Any] | None = None,
+        references: list[Any] | None = None,
+        sensitivity: str = "internal",
+        source_agent: str | None = None,
+    ) -> dict[str, Any]:
+        """Record what Codex implemented, changed, tested, and left for follow-up."""
+        return tool_impl.record_codex_session_summary(
+            project=project,
+            title=title,
+            summary=summary,
+            files_changed=files_changed,
+            commands_run=commands_run,
+            tests_run=tests_run,
+            implementation_notes=implementation_notes,
+            decisions=decisions,
+            tasks_created=tasks_created,
+            blockers=blockers,
+            followups=followups,
+            references=references,
+            sensitivity=sensitivity,
+            source_agent=source_agent,
+        )
+
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
     def update_task_status(task_id: int, status: str) -> dict[str, Any]:
         """Update a task status to open, blocked, or done."""
         return tool_impl.update_task_status(task_id=task_id, status=status)
@@ -259,10 +391,98 @@ def create_mcp(config: WorkstreamConfig | None = None):
         """Update a blocker status to open or resolved."""
         return tool_impl.update_blocker_status(blocker_id=blocker_id, status=status)
 
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    def mark_event_consumed_by_agent(
+        consumer_agent: str,
+        event_ids: list[int] | None = None,
+        event_id: int | None = None,
+        project: str | None = None,
+        notes: str | None = None,
+        action_taken: str | None = None,
+    ) -> dict[str, Any]:
+        """Mark one or more semantic workstream events consumed by an agent and advance its cursor."""
+        return tool_impl.mark_event_consumed_by_agent(
+            consumer_agent=consumer_agent,
+            event_ids=event_ids,
+            event_id=event_id,
+            project=project,
+            notes=notes,
+            action_taken=action_taken,
+        )
+
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    def create_or_update_project_brief(
+        project: str,
+        summary_delta: str,
+        status: str | None = None,
+        current_state: str | None = None,
+        next_steps: list[Any] | None = None,
+        risks: list[Any] | None = None,
+        source_event_ids: list[int] | None = None,
+        sensitivity: str = "internal",
+    ) -> dict[str, Any]:
+        """Append durable project-brief context derived from structured Workstream events."""
+        return tool_impl.create_or_update_project_brief(
+            project=project,
+            summary_delta=summary_delta,
+            status=status,
+            current_state=current_state,
+            next_steps=next_steps,
+            risks=risks,
+            source_event_ids=source_event_ids,
+            sensitivity=sensitivity,
+        )
+
     @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], SEARCH_OUTPUT_SCHEMA))
     def search_workstream(query: str, project: str | None = None, limit: int = 20):
         """Search captured workstream content."""
         return app_tool_impl.search_workstream(query=query, project=project, limit=limit)
+
+    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], EVENTS_OUTPUT_SCHEMA))
+    def list_recent_changes_since(
+        project: str | None = None,
+        since_event_id: int | None = None,
+        since_timestamp: str | None = None,
+        source_filter: str | list[str] | None = None,
+        event_type_filter: str | list[str] | None = None,
+        include_consumed: bool = False,
+        consumer_agent: str | None = None,
+        limit: int = 50,
+        order: str = "asc",
+    ):
+        """List semantic Workstream events since a checkpoint, optionally excluding events consumed by an agent."""
+        return app_tool_impl.list_recent_changes_since(
+            project=project,
+            since_event_id=since_event_id,
+            since_timestamp=since_timestamp,
+            source_filter=source_filter,
+            event_type_filter=event_type_filter,
+            include_consumed=include_consumed,
+            consumer_agent=consumer_agent,
+            limit=limit,
+            order=order,
+        )
+
+    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], DIGEST_OUTPUT_SCHEMA))
+    def get_agent_digest(
+        agent: str,
+        project: str | None = None,
+        include_tasks: bool = True,
+        include_blockers: bool = True,
+        include_recent_decisions: bool = True,
+        include_unconsumed_events: bool = True,
+        limit: int = 20,
+    ):
+        """Return a compact startup digest of unconsumed events and open work for an agent."""
+        return app_tool_impl.get_agent_digest(
+            agent=agent,
+            project=project,
+            include_tasks=include_tasks,
+            include_blockers=include_blockers,
+            include_recent_decisions=include_recent_decisions,
+            include_unconsumed_events=include_unconsumed_events,
+            limit=limit,
+        )
 
     @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], PROJECTS_OUTPUT_SCHEMA))
     def list_projects():

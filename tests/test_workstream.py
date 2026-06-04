@@ -18,7 +18,21 @@ from workstream_mcp.db import WorkstreamDB
 from workstream_mcp.export import export_markdown
 from workstream_mcp.resources import render_open_tasks, render_project_brief, render_projects
 from workstream_mcp.safety import SecretDetectedError, assert_safe_to_store
-from workstream_mcp.tools import capture_handoff, record_codex_session, search_workstream, update_blocker_status, update_task_status
+from workstream_mcp.tools import (
+    capture_handoff,
+    create_or_update_project_brief,
+    get_agent_digest,
+    list_recent_changes_since,
+    mark_event_consumed_by_agent,
+    record_chatgpt_decision,
+    record_codex_session,
+    record_codex_session_summary,
+    record_openclaw_followup,
+    record_session_handoff,
+    search_workstream,
+    update_blocker_status,
+    update_task_status,
+)
 
 
 def _oauth_config(tmp_path: Path) -> tuple[WorkstreamConfig, rsa.RSAPrivateKey]:
@@ -81,7 +95,19 @@ def test_initialize_database_creates_tables(tmp_path: Path) -> None:
         row["name"]
         for row in db.query_all("SELECT name FROM sqlite_master WHERE type = 'table'")
     }
-    assert {"projects", "events", "tasks", "decisions", "blockers", "references", "codex_sessions"} <= tables
+    assert {
+        "projects",
+        "events",
+        "event_links",
+        "tasks",
+        "decisions",
+        "blockers",
+        "references",
+        "codex_sessions",
+        "agent_event_consumption",
+        "agent_project_cursors",
+        "project_briefs",
+    } <= tables
 
 
 def test_capture_handoff_creates_project_event_and_related_rows(tmp_path: Path) -> None:
@@ -107,6 +133,198 @@ def test_capture_handoff_creates_project_event_and_related_rows(tmp_path: Path) 
     assert db.query_one("SELECT COUNT(*) AS count FROM decisions")["count"] == 1
     assert db.query_one("SELECT COUNT(*) AS count FROM blockers")["count"] == 1
     assert db.query_one('SELECT COUNT(*) AS count FROM "references"')["count"] == 1
+
+
+def test_record_session_handoff_creates_session_event_and_linked_rows(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    result = record_session_handoff(
+        project="Native Commands",
+        source="chatgpt",
+        source_agent="chatgpt-browser",
+        title="Native command design",
+        summary="Move cross-agent state into structured Workstream events.",
+        decisions=[
+            {
+                "title": "Use semantic event capture",
+                "summary": "Agents should consume Workstream events rather than raw browser state.",
+                "rationale": "Structured events are durable and safer to share.",
+            }
+        ],
+        tasks=[{"title": "Implement record_session_handoff", "priority": "high", "owner": "codex"}],
+        blockers=[{"title": "Validate Apps SDK descriptor compatibility"}],
+        references=[{"label": "Design note", "uri": "https://example.test/workstreams"}],
+        next_actions=["Codex should inspect schema first."],
+        open_questions=["Should project briefs be regenerated automatically?"],
+        sensitivity="personal",
+        db_path=db_path,
+    )
+
+    db = WorkstreamDB(db_path)
+    event = db.get_event(result["event_id"])
+    assert event["event_type"] == "handoff"
+    assert event["source"] == "chatgpt"
+    assert event["source_agent"] == "chatgpt-browser"
+    assert event["sensitivity"] == "personal"
+    assert len(result["created_event_ids"]) == 5
+    assert len(result["decision_ids"]) == 1
+    assert len(result["task_ids"]) == 1
+    assert len(result["blocker_ids"]) == 1
+    assert len(result["reference_ids"]) == 1
+    assert db.query_one("SELECT COUNT(*) AS count FROM event_links")["count"] >= 4
+
+
+def test_record_session_handoff_links_duplicate_open_tasks(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    first = record_session_handoff(
+        project="Dedupe Project",
+        source="chatgpt",
+        title="First",
+        summary="First handoff",
+        tasks=["Implement durable event consumption"],
+        db_path=db_path,
+    )
+    second = record_session_handoff(
+        project="Dedupe Project",
+        source="chatgpt",
+        title="Second",
+        summary="Second handoff",
+        tasks=["Implement durable event consumption"],
+        db_path=db_path,
+    )
+
+    db = WorkstreamDB(db_path)
+    assert first["task_ids"] == [1]
+    assert second["task_ids"] == []
+    assert second["linked_existing_task_ids"] == [1]
+    assert db.query_one("SELECT COUNT(*) AS count FROM tasks")["count"] == 1
+
+
+def test_list_recent_changes_since_filters_by_project_and_consumption(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    a = record_session_handoff(
+        project="Project A",
+        source="chatgpt",
+        title="A handoff",
+        summary="A summary",
+        tasks=["Task A"],
+        db_path=db_path,
+    )
+    record_session_handoff(
+        project="Project B",
+        source="codex",
+        title="B handoff",
+        summary="B summary",
+        tasks=["Task B"],
+        db_path=db_path,
+    )
+
+    project_a_events = list_recent_changes_since(project="Project A", db_path=db_path)["events"]
+    assert {event["project_slug"] for event in project_a_events} == {"project-a"}
+    assert [event["id"] for event in project_a_events] == sorted(event["id"] for event in project_a_events)
+
+    mark_once = mark_event_consumed_by_agent(
+        consumer_agent="albert-openclaw",
+        event_ids=a["created_event_ids"],
+        action_taken="Created GTD follow-up.",
+        db_path=db_path,
+    )
+    mark_twice = mark_event_consumed_by_agent(
+        consumer_agent="albert-openclaw",
+        event_ids=a["created_event_ids"],
+        db_path=db_path,
+    )
+    remaining = list_recent_changes_since(
+        project="Project A",
+        consumer_agent="albert-openclaw",
+        include_consumed=False,
+        db_path=db_path,
+    )
+    assert mark_once["consumed_event_ids"] == a["created_event_ids"]
+    assert mark_twice["already_consumed_event_ids"] == a["created_event_ids"]
+    assert remaining["events"] == []
+
+
+def test_record_openclaw_followup_creates_assigned_task_and_digest(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    result = record_openclaw_followup(
+        project="Ops Project",
+        title="Monitor shipping email",
+        description="Watch inbox for the tracking number.",
+        priority="high",
+        assigned_agent="albert-openclaw",
+        context="Needed for order follow-up.",
+        db_path=db_path,
+    )
+
+    db = WorkstreamDB(db_path)
+    task = db.query_one("SELECT * FROM tasks WHERE id = ?", (result["task_id"],))
+    digest = get_agent_digest("albert-openclaw", project="Ops Project", db_path=db_path)
+    assert task["owner"] == "albert-openclaw"
+    assert result["event_id"] == task["event_id"]
+    assert digest["assigned_open_tasks"][0]["title"] == "Monitor shipping email"
+
+
+def test_record_codex_session_summary_records_implementation_notes(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    result = record_codex_session_summary(
+        project="Implementation Project",
+        title="Implemented event consumption",
+        summary="Added event cursors and agent digests.",
+        files_changed=["src/workstream_mcp/db.py"],
+        commands_run=["pytest"],
+        tests_run=["pytest tests/test_workstream.py"],
+        implementation_notes=[
+            {"title": "Added agent_event_consumption", "summary": "Tracks event consumption by agent."}
+        ],
+        followups=[{"title": "Document OpenClaw startup flow", "owner": "any-openclaw"}],
+        sensitivity="internal",
+        db_path=db_path,
+    )
+
+    db = WorkstreamDB(db_path)
+    event_types = [row["event_type"] for row in db.query_all("SELECT event_type FROM events ORDER BY id")]
+    assert "session_summary" in event_types
+    assert "implementation_note" in event_types
+    assert result["implementation_note_event_ids"]
+    assert db.query_one("SELECT COUNT(*) AS count FROM codex_sessions")["count"] == 1
+
+
+def test_chatgpt_decision_idempotency_and_project_brief_update(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    first = record_chatgpt_decision(
+        project="Brief Project",
+        title="Use Workstreams as coordination substrate",
+        summary="Agents should coordinate through Workstreams events.",
+        rationale="It avoids brittle transcript scraping.",
+        sensitivity="internal",
+        db_path=db_path,
+    )
+    second = record_chatgpt_decision(
+        project="Brief Project",
+        title="Use Workstreams as coordination substrate",
+        summary="Agents should coordinate through Workstreams events.",
+        rationale="It avoids brittle transcript scraping.",
+        sensitivity="internal",
+        db_path=db_path,
+    )
+    brief = create_or_update_project_brief(
+        project="Brief Project",
+        summary_delta="Event consumption is the current coordination model.",
+        status="active",
+        current_state="Implementing durable commands.",
+        next_steps=["Run tests", "Update docs"],
+        risks=["Avoid noisy event capture"],
+        source_event_ids=[first["event_id"]],
+        sensitivity="internal",
+        db_path=db_path,
+    )
+
+    db = WorkstreamDB(db_path)
+    assert first["created"] is True
+    assert second["created"] is False
+    assert db.query_one("SELECT COUNT(*) AS count FROM decisions")["count"] == 1
+    assert brief["brief"]["status"] == "active"
+    assert "Event consumption" in render_project_brief("Brief Project", db_path=db_path)
 
 
 def test_record_codex_session_creates_session_tasks_decisions_and_blockers(tmp_path: Path) -> None:

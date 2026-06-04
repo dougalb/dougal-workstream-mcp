@@ -51,6 +51,11 @@ def render_recent(db_path: str | Path | None = None, limit: int = 20) -> str:
         lines.append(f"## {event['title']}")
         lines.append(f"- Project: `{event['project_slug']}`")
         lines.append(f"- Type: {event['event_type']}")
+        if event.get("source"):
+            source = event["source"]
+            if event.get("source_agent"):
+                source = f"{source} ({event['source_agent']})"
+            lines.append(f"- Source: {source}")
         lines.append(f"- Created: {event['created_at']}")
         if event.get("summary"):
             lines.append("")
@@ -97,6 +102,24 @@ def render_project(project_id: str, db_path: str | Path | None = None) -> str:
         return f"# Project Not Found\n\nNo project matched `{project_id}`.\n"
     project = state["project"]
     lines = [f"# {project['name']}", "", f"- Slug: `{project['slug']}`", f"- Created: {project['created_at']}", ""]
+    if state.get("project_brief"):
+        brief = state["project_brief"]
+        lines.extend(["## Current Brief"])
+        if brief.get("status"):
+            lines.append(f"- Status: {brief['status']}")
+        if brief.get("summary"):
+            lines.extend(["", str(brief["summary"])])
+        if brief.get("current_state"):
+            lines.extend(["", "Current state:", str(brief["current_state"])])
+        next_steps = json.loads(brief.get("next_steps_json") or "[]")
+        if next_steps:
+            lines.extend(["", "Next steps:"])
+            lines.extend(f"- {step}" for step in next_steps)
+        risks = json.loads(brief.get("risks_json") or "[]")
+        if risks:
+            lines.extend(["", "Risks:"])
+            lines.extend(f"- {risk}" for risk in risks)
+        lines.append("")
     lines.extend(["## Open Tasks", _line_items(state["open_tasks"], "No open tasks."), ""])
     lines.extend(["## Open Blockers", _line_items(state["open_blockers"], "No open blockers."), ""])
     lines.extend(["## Recent Decisions", _line_items(state["decisions"], "No decisions recorded."), ""])
@@ -153,6 +176,11 @@ def project_state_for_json(project_id: str, db_path: str | Path | None = None) -
     for session in state["codex_sessions"]:
         session["changed_files"] = json.loads(session.pop("changed_files_json") or "[]")
         session["commands_run"] = json.loads(session.pop("commands_run_json") or "[]")
+    if state.get("project_brief"):
+        brief = state["project_brief"]
+        brief["next_steps"] = json.loads(brief.pop("next_steps_json") or "[]")
+        brief["risks"] = json.loads(brief.pop("risks_json") or "[]")
+        brief["source_event_ids"] = json.loads(brief.pop("source_event_ids_json") or "[]")
     return state
 
 

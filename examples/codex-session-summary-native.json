@@ -1,0 +1,30 @@
+{
+  "project": "workstream-e2e-v03",
+  "title": "Implemented Workstreams-native event commands",
+  "summary": "Added richer event fields, agent consumption cursors, digest tools, and tests.",
+  "files_changed": [
+    "src/workstream_mcp/schema.py",
+    "src/workstream_mcp/db.py",
+    "src/workstream_mcp/tools.py"
+  ],
+  "commands_run": [
+    "pytest -q"
+  ],
+  "tests_run": [
+    "28 passed"
+  ],
+  "implementation_notes": [
+    {
+      "title": "Events remain canonical",
+      "summary": "The existing events table was extended instead of replacing it."
+    }
+  ],
+  "followups": [
+    {
+      "title": "Validate OpenClaw startup digest in the target environment",
+      "owner": "any-openclaw",
+      "priority": "medium"
+    }
+  ],
+  "sensitivity": "internal"
+}

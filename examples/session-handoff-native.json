@@ -1,0 +1,25 @@
+{
+  "project": "workstream-e2e-v03",
+  "source": "chatgpt",
+  "title": "Long-term Workstreams-native command design",
+  "summary": "Discussed moving from generic task and decision recording toward native cross-agent coordination commands.",
+  "decisions": [
+    {
+      "title": "Use semantic event capture rather than browser scraping",
+      "summary": "Agents should consume structured Workstreams events instead of inspecting ChatGPT UI state.",
+      "rationale": "Structured events are more reliable, auditable, privacy-preserving, and useful to other agents."
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Implement Workstreams-native session handoff command",
+      "priority": "high",
+      "owner": "codex"
+    }
+  ],
+  "next_actions": [
+    "Codex should inspect existing schema and propose additive migrations.",
+    "OpenClaw should later consume recent events using a cursor."
+  ],
+  "sensitivity": "internal"
+}

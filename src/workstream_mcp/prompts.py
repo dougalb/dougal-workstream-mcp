@@ -6,7 +6,7 @@ from .resources import render_project
 
 
 def chatgpt_handoff(project: str = "", sensitivity: str = "internal") -> str:
-    return f"""Create a workstream handoff using this structure.
+    return f"""Create a durable Workstreams handoff and call record_session_handoff with this structure.
 
 Project: {project}
 Sensitivity: {sensitivity}
@@ -16,16 +16,22 @@ Title:
 Summary:
 
 Decisions:
-- 
+-
+
+Tasks:
+-
 
 Next Actions:
-- 
+-
+
+Open Questions:
+-
 
 Blockers:
-- 
+-
 
 References:
-- 
+-
 
 Rules:
 - Do not include secrets, API keys, passwords, tokens, private keys, or OAuth secrets.
@@ -34,32 +40,42 @@ Rules:
 
 
 def codex_session_summary(project: str = "", repo_path: str = "", host: str = "") -> str:
-    return f"""Fill out this Codex end-of-session summary for the workstream.
+    return f"""Fill out this Codex end-of-session summary and call record_codex_session_summary.
 
 Project: {project}
 Repo Path: {repo_path}
 Host: {host}
 
-Goal:
+Title:
 
-Status:
+Summary:
 
-Changed Files:
-- 
+Files Changed:
+-
 
 Commands Run:
-- 
+-
 
-Tests Summary:
+Tests Run:
+-
+
+Implementation Notes:
+-
 
 Decisions:
-- 
+-
 
-Next Actions:
-- 
+Tasks Created:
+-
+
+Followups:
+-
 
 Blockers:
-- 
+-
+
+References:
+-
 
 Sensitivity: internal
 
