@@ -210,6 +210,42 @@ def _result(text: str, structured: dict[str, Any], meta: dict[str, Any] | None =
     )
 
 
+def _by_id(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {str(row["id"]): row for row in rows if row.get("id") is not None}
+
+
+def _brief_ui_meta(state: dict[str, Any], meta: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **meta,
+        "defaultView": "overview",
+        "displayOrder": [
+            "overview",
+            "current_state",
+            "open_tasks",
+            "decisions",
+            "blockers",
+            "references",
+            "recent_sessions",
+            "next_steps",
+        ],
+        "eventsById": _by_id(state.get("recent_events", [])),
+        "tasksById": _by_id(state.get("open_tasks", [])),
+        "decisionsById": _by_id(state.get("decisions", [])),
+        "blockersById": _by_id(state.get("open_blockers", [])),
+        "referencesById": _by_id(state.get("references", [])),
+        "sessionsById": _by_id(state.get("codex_sessions", [])),
+    }
+
+
+def _group_search_results(results: list[dict[str, Any]]) -> dict[str, list[str]]:
+    groups: dict[str, list[str]] = {}
+    for row in results:
+        kind = str(row.get("kind") or "result")
+        stable_id = str(row.get("stable_id") or f"{kind}:{row.get('id')}")
+        groups.setdefault(kind, []).append(stable_id)
+    return groups
+
+
 def list_projects(db_path: str | Path | None = None) -> CallToolResult:
     projects = [
         _safe_row(row, ["id", "slug", "name", "open_tasks", "open_blockers", "last_event_at"])
@@ -258,7 +294,10 @@ def get_project_brief(project: str, db_path: str | Path | None = None) -> CallTo
     if state["decisions"]:
         lines.append("Recent decisions:")
         lines.extend(f"- {decision['title']}" for decision in state["decisions"][:5])
-    return _result("\n".join(lines), state, meta)
+    omitted = int(meta.get("omitted_sensitive_rows", 0))
+    if omitted:
+        lines.append(f"{omitted} sensitive row(s) omitted.")
+    return _result("\n".join(lines), {**state, "omitted_sensitive_rows": omitted}, _brief_ui_meta(state, meta))
 
 
 def search_workstream(query: str, project: str | None = None, limit: int = 20, db_path: str | Path | None = None) -> CallToolResult:
@@ -267,7 +306,9 @@ def search_workstream(query: str, project: str | None = None, limit: int = 20, d
     results = []
     for row in _db(db_path).search(query=query, project=project, limit=limit):
         if _row_allowed(row, include_sensitive):
-            results.append(_safe_row(row, ["kind", "id", "project", "title", "snippet", "created_at"]))
+            result = _safe_row(row, ["kind", "id", "project", "title", "snippet", "created_at"])
+            result["stable_id"] = f"{result['kind']}:{result['id']}"
+            results.append(result)
         else:
             omitted += 1
 
@@ -275,7 +316,15 @@ def search_workstream(query: str, project: str | None = None, limit: int = 20, d
     lines.extend(f"- [{row['project']}] {row['kind']}: {row['title']}" for row in results)
     if not results:
         lines.append("- No matching workstream entries.")
-    return _result("\n".join(lines), {"results": results}, {"count": len(results), "omitted_sensitive_rows": omitted})
+    if omitted:
+        lines.append(f"{omitted} sensitive row(s) omitted.")
+    structured = {"query": query, "project": project, "count": len(results), "results": results, "omitted_sensitive_rows": omitted}
+    meta = {
+        "defaultView": "grouped",
+        "resultsById": {row["stable_id"]: row for row in results},
+        "timelineGroups": _group_search_results(results),
+    }
+    return _result("\n".join(lines), structured, meta)
 
 
 def list_recent_changes_since(

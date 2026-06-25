@@ -63,6 +63,16 @@ Secret-looking raw values are rejected. Store secret references only, such as `o
 
 ChatGPT-facing read tools omit sensitive rows unless the caller has `workstream.sensitive`.
 
+## MCP Apps UI Resources
+
+Workstreams exposes optional MCP Apps UI resources for clients that can render them, including ChatGPT. These resources are progressive UI enhancements, not the source of truth.
+
+- Plain MCP clients should read `content` and the advertised output schemas.
+- Structured MCP clients should parse `structuredContent`.
+- MCP Apps-capable clients may render `ui://workstreams/project-brief.html`, `ui://workstreams/search-results.html`, or `ui://workstreams/write-review.html` and use tool-result `_meta` as UI hydration data.
+
+Do not put secrets, raw email bodies, private raw records, or required model-visible data in tool-result `_meta`. If `_meta` is ignored, the result must remain complete and useful through `content` and `structuredContent`.
+
 ## Consumption Model
 
 Agents maintain their own event checkpoints.
@@ -210,4 +220,3 @@ Call with `mark_event_consumed_by_agent`.
 2. Call `list_recent_changes_since` with the project and any known checkpoint.
 3. Avoid restating old context unless the new work changes project state.
 4. Record durable decisions or handoffs before ending the session.
-

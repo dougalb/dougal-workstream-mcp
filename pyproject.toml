@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dougal-workstream-mcp"
-version = "0.4.0"
+version = "0.5.0"
 description = "Local-first MCP workstream server backed by SQLite."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -91,7 +91,7 @@ Example CLI capture:
 workstream capture --file examples/handoff.json --source chatgpt --project dougal-workstream-mcp
 ```
 
-Additional v0.2 CLI commands:
+Additional CLI commands:
 
 ```bash
 workstream record-codex-session --file examples/codex-session.json
@@ -177,16 +177,57 @@ OpenClaw can consume this in two local-first ways:
 - as an MCP client reading `workstream://projects`, `workstream://recent`, and project resources directly.
 - through the read-only CLI bridge command `workstream brief PROJECT --format json` or `workstream brief PROJECT`.
 
-For v0.3, the app can sit behind an external HTTPS reverse proxy, but this repo does not manage NGINX or certificates. See `docs/public-proxy-contract.md`.
+For HTTP deployments, the app can sit behind an external HTTPS reverse proxy, but this repo does not manage NGINX or certificates. See `docs/public-proxy-contract.md`.
 
-## ChatGPT Apps SDK Spike
+## MCP Apps UI Compatibility
 
-v0.3 adds the first ChatGPT Apps SDK-oriented surface:
+Workstreams remains MCP-first. ChatGPT and other MCP Apps-capable clients can render optional UI resources, but the server contract does not depend on iframe rendering.
+
+### UI compatibility model
+
+Workstreams tools are designed to work in three client classes:
+
+1. Plain MCP clients: use `content` and schemas.
+2. Structured MCP clients: use `structuredContent` and output schemas.
+3. MCP Apps-capable clients such as ChatGPT: may additionally render `ui://` resources and use result `_meta` for UI hydration.
+
+The UI layer is optional. Correctness must never depend on iframe rendering.
+
+Read tools return concise `content` text for older text-only clients and schema-valid `structuredContent` for clients that parse JSON. Tool-result `_meta` is reserved for UI-only hydration data such as ID maps, grouping hints, display ordering, and default view selection. `_meta` must not contain secrets, raw sensitive records, or the only copy of data needed to understand a result.
+
+The current MCP Apps UI resources are:
+
+- `ui://workstreams/project-brief.html`, advertised by `get_project_brief`.
+- `ui://workstreams/search-results.html`, advertised by `search_workstream`.
+- `ui://workstreams/write-review.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
+
+The server uses standard MCP Apps metadata first:
+
+- tool descriptor `_meta.ui.resourceUri`
+- resource `_meta.ui.prefersBorder`
+- resource `_meta.ui.csp`
+
+For ChatGPT compatibility, descriptors and resources also include OpenAI aliases where useful:
+
+- `openai/outputTemplate`
+- `openai/toolInvocation/invoking`
+- `openai/toolInvocation/invoked`
+- `openai/widgetDescription`
+- `openai/widgetPrefersBorder`
+- `openai/widgetCSP`
+
+The HTML resources are dependency-free, use the standard `ui/notifications/tool-result` bridge, and feature-detect `window.openai` before using ChatGPT-specific bridge state. Their CSP metadata keeps `connectDomains` and `resourceDomains` empty because the widgets are self-contained.
+
+Codex, OpenClaw, Claude, Cline, and other plain MCP clients should keep consuming the same tools through text and structured JSON. They should not rely on the Apps UI resources or ChatGPT-specific aliases.
+
+## HTTP / ChatGPT Apps SDK Compatibility
+
+v0.3 added the first ChatGPT Apps SDK-oriented surface:
 
 - Streamable HTTP at `/mcp`.
 - SSE compatibility at `/sse` and `/messages/`.
 - OAuth protected-resource metadata at `/.well-known/oauth-protected-resource`.
-- Apps SDK-safe tools with `securitySchemes`, output schemas, annotations, structured content, and a minimal `ui://widget/project-brief-v1.html` component resource.
+- Apps SDK-safe tools with `securitySchemes`, output schemas, annotations, structured content, optional MCP Apps UI resources, and ChatGPT compatibility metadata.
 
 OAuth mode uses an external OAuth/OIDC provider. The app is only a resource server.
 
@@ -240,6 +281,16 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - blocker status transitions: `open`, `resolved`.
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
+
+## v0.5 Notes
+
+v0.5 hardens the portable MCP contract and layers MCP Apps UI resources on top:
+
+- Standard `ui://workstreams/...` resources for project briefs, search results, and semantic write review.
+- Tool descriptors with output schemas, read-only annotations, standard MCP Apps metadata, and ChatGPT compatibility aliases.
+- Read results that keep `content` and `structuredContent` complete without relying on UI rendering.
+- Tool-result `_meta` reserved for optional UI hydration.
+- Client compatibility documentation for plain MCP, structured MCP, and MCP Apps-capable clients.
 
 ## v0.3 Notes
 

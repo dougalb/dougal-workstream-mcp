@@ -3,21 +3,55 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
+from . import __version__
 from . import app_tools as app_tool_impl
 from . import prompts as prompt_templates
 from . import resources as resource_renderers
 from . import tools as tool_impl
+from . import ui_resources
 from .auth import JWTTokenVerifier, READ_SCOPE, WRITE_SCOPE, oauth_challenge, protected_resource_metadata
 from .auth import reset_current_access_token, set_current_access_token
 from .config import WorkstreamConfig, configure_logging, load_config
 from .db import WorkstreamDB
 
-PROJECT_BRIEF_WIDGET_URI = "ui://widget/project-brief-v1.html"
+PROJECT_BRIEF_UI_URI = "ui://workstreams/project-brief.html"
+SEARCH_RESULTS_UI_URI = "ui://workstreams/search-results.html"
+WRITE_REVIEW_UI_URI = "ui://workstreams/write-review.html"
+LEGACY_PROJECT_BRIEF_WIDGET_URI = "ui://widget/project-brief-v1.html"
 
 OBJECT_OUTPUT_SCHEMA = {"type": "object", "additionalProperties": True}
+CONFIRMATION_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "project_id": {"type": "integer"},
+        "project_slug": {"type": "string"},
+        "event_id": {"type": ["integer", "null"]},
+        "created_event_ids": {"type": "array", "items": {"type": "integer"}},
+        "summary": {"type": "string"},
+        "created": {"type": "boolean"},
+    },
+    "additionalProperties": True,
+}
 PROJECTS_OUTPUT_SCHEMA = {
     "type": "object",
-    "properties": {"projects": {"type": "array", "items": {"type": "object", "additionalProperties": True}}},
+    "properties": {
+        "projects": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "slug": {"type": "string"},
+                    "name": {"type": "string"},
+                    "open_tasks": {"type": "integer"},
+                    "open_blockers": {"type": "integer"},
+                    "last_event_at": {"type": ["string", "null"]},
+                },
+                "required": ["id", "slug", "name"],
+                "additionalProperties": True,
+            },
+        }
+    },
     "required": ["projects"],
     "additionalProperties": True,
 }
@@ -29,8 +63,30 @@ TASKS_OUTPUT_SCHEMA = {
 }
 SEARCH_OUTPUT_SCHEMA = {
     "type": "object",
-    "properties": {"results": {"type": "array", "items": {"type": "object", "additionalProperties": True}}},
-    "required": ["results"],
+    "properties": {
+        "query": {"type": "string"},
+        "project": {"type": ["string", "null"]},
+        "count": {"type": "integer"},
+        "omitted_sensitive_rows": {"type": "integer"},
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "kind": {"type": "string"},
+                    "id": {"type": "integer"},
+                    "stable_id": {"type": "string"},
+                    "project": {"type": "string"},
+                    "title": {"type": "string"},
+                    "snippet": {"type": ["string", "null"]},
+                    "created_at": {"type": ["string", "null"]},
+                },
+                "required": ["kind", "id", "stable_id", "project", "title"],
+                "additionalProperties": True,
+            },
+        },
+    },
+    "required": ["query", "count", "results"],
     "additionalProperties": True,
 }
 EVENTS_OUTPUT_SCHEMA = {
@@ -47,6 +103,31 @@ DIGEST_OUTPUT_SCHEMA = {
         "open_blockers": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
     },
     "required": ["unconsumed_events", "assigned_open_tasks", "open_blockers"],
+    "additionalProperties": True,
+}
+PROJECT_BRIEF_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "project": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "slug": {"type": "string"},
+                "name": {"type": "string"},
+            },
+            "required": ["id", "slug", "name"],
+            "additionalProperties": True,
+        },
+        "project_brief": {"type": ["object", "null"], "additionalProperties": True},
+        "recent_events": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "open_tasks": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "decisions": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "open_blockers": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "references": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "codex_sessions": {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+        "omitted_sensitive_rows": {"type": "integer"},
+        "error": {"type": "string"},
+    },
     "additionalProperties": True,
 }
 
@@ -92,7 +173,7 @@ class WorkstreamOAuthMiddleware:
 def _annotations(read_only: bool):
     from mcp.types import ToolAnnotations
 
-    return ToolAnnotations(readOnlyHint=read_only, destructiveHint=False, openWorldHint=False)
+    return ToolAnnotations(readOnlyHint=read_only, destructiveHint=False, idempotentHint=False, openWorldHint=False)
 
 
 def _security_schemes(config: WorkstreamConfig, scopes: list[str]) -> list[dict[str, Any]]:
@@ -105,57 +186,43 @@ def _tool_meta(
     config: WorkstreamConfig,
     scopes: list[str],
     output_schema: dict[str, Any] | None = None,
-    widget: bool = False,
+    ui_resource_uri: str | None = None,
+    invoking: str | None = None,
+    invoked: str | None = None,
 ) -> dict[str, Any]:
     meta: dict[str, Any] = {"securitySchemes": _security_schemes(config, scopes)}
     if output_schema is not None:
         meta["workstream/outputSchema"] = output_schema
-    if widget:
-        meta["openai/outputTemplate"] = PROJECT_BRIEF_WIDGET_URI
-        meta["ui"] = {"resourceUri": PROJECT_BRIEF_WIDGET_URI, "visibility": ["model", "app"]}
+    if ui_resource_uri:
+        # Prefer standard MCP Apps metadata, then add OpenAI aliases for ChatGPT compatibility.
+        meta["ui"] = {"resourceUri": ui_resource_uri}
+        meta["openai/outputTemplate"] = ui_resource_uri
+    if invoking:
+        meta["openai/toolInvocation/invoking"] = invoking
+    if invoked:
+        meta["openai/toolInvocation/invoked"] = invoked
     return meta
 
 
-def _widget_html() -> str:
-    return """
-<div id="workstream-root">Loading workstream brief...</div>
-<style>
-  :root { color-scheme: light dark; }
-  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  #workstream-root { padding: 12px; }
-  h2 { font-size: 16px; margin: 0 0 8px; }
-  ul { margin: 8px 0 0; padding-left: 18px; }
-  li { margin: 4px 0; }
-</style>
-<script type="module">
-const root = document.getElementById("workstream-root");
-function render(result) {
-  const data = result?.structuredContent;
-  if (!data?.project) {
-    root.textContent = "No project brief available.";
-    return;
-  }
-  const tasks = data.open_tasks ?? [];
-  const blockers = data.open_blockers ?? [];
-  root.innerHTML = `
-    <h2>${data.project.name}</h2>
-    <div>${tasks.length} open tasks, ${blockers.length} open blockers</div>
-    <ul>${tasks.slice(0, 6).map((task) => `<li>${task.title}</li>`).join("")}</ul>
-  `;
-}
-window.addEventListener("message", (event) => {
-  if (event.source !== window.parent) return;
-  const message = event.data;
-  if (message?.method === "ui/notifications/tool-result") render(message.params);
-}, { passive: true });
-</script>
-""".strip()
+def _ui_resource_meta(description: str) -> dict[str, Any]:
+    csp = {"connectDomains": [], "resourceDomains": []}
+    return {
+        "ui": {"prefersBorder": True, "csp": csp},
+        "openai/widgetDescription": description,
+        "openai/widgetPrefersBorder": True,
+        "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+    }
 
 
 def _create_fastmcp_class():
     from mcp.server.fastmcp import FastMCP
 
     class WorkstreamFastMCP(FastMCP):
+        def __init__(self, *args: Any, server_version: str | None = None, **kwargs: Any):
+            super().__init__(*args, **kwargs)
+            if server_version is not None:
+                self._mcp_server.version = server_version
+
         async def list_tools(self):
             tools = await super().list_tools()
             for tool in tools:
@@ -179,13 +246,24 @@ def create_mcp(config: WorkstreamConfig | None = None):
 
     mcp = FastMCP(
         "dougal-workstream-mcp",
+        server_version=__version__,
         instructions="Local-first shared workstream context backed by SQLite.",
         stateless_http=True,
         json_response=True,
         transport_security=TransportSecuritySettings(allowed_hosts=config.allowed_hosts),
     )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording handoff...",
+            invoked="Handoff recorded",
+        ),
+    )
     def capture_handoff(
         source: str,
         project: str,
@@ -210,7 +288,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             sensitivity=sensitivity,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording handoff...",
+            invoked="Handoff recorded",
+        ),
+    )
     def record_session_handoff(
         project: str,
         source: str,
@@ -241,7 +329,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             source_agent=source_agent,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording decision...",
+            invoked="Decision recorded",
+        ),
+    )
     def record_decision(
         project: str,
         title: str,
@@ -252,7 +350,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
         """Record a project decision."""
         return tool_impl.record_decision(project, title, summary, rationale, sensitivity)
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording decision...",
+            invoked="Decision recorded",
+        ),
+    )
     def record_chatgpt_decision(
         project: str,
         title: str,
@@ -277,7 +385,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             source_agent=source_agent,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording task...",
+            invoked="Task recorded",
+        ),
+    )
     def record_task(
         project: str,
         title: str,
@@ -290,7 +408,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
         """Record an open task."""
         return tool_impl.record_task(project, title, description, priority, due_date, owner, sensitivity)
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording follow-up...",
+            invoked="Follow-up recorded",
+        ),
+    )
     def record_openclaw_followup(
         project: str,
         title: str,
@@ -315,7 +443,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             sensitivity=sensitivity,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording session...",
+            invoked="Session recorded",
+        ),
+    )
     def record_codex_session(
         project: str,
         repo_path: str,
@@ -346,7 +484,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             sensitivity=sensitivity,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Recording session summary...",
+            invoked="Session summary recorded",
+        ),
+    )
     def record_codex_session_summary(
         project: str,
         title: str,
@@ -381,17 +529,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             source_agent=source_agent,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], CONFIRMATION_OUTPUT_SCHEMA))
     def update_task_status(task_id: int, status: str) -> dict[str, Any]:
         """Update a task status to open, blocked, or done."""
         return tool_impl.update_task_status(task_id=task_id, status=status)
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], CONFIRMATION_OUTPUT_SCHEMA))
     def update_blocker_status(blocker_id: int, status: str) -> dict[str, Any]:
         """Update a blocker status to open or resolved."""
         return tool_impl.update_blocker_status(blocker_id=blocker_id, status=status)
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], CONFIRMATION_OUTPUT_SCHEMA))
     def mark_event_consumed_by_agent(
         consumer_agent: str,
         event_ids: list[int] | None = None,
@@ -410,7 +558,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             action_taken=action_taken,
         )
 
-    @mcp.tool(annotations=_annotations(False), meta=_tool_meta(config, [READ_SCOPE, WRITE_SCOPE], OBJECT_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(False),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE, WRITE_SCOPE],
+            CONFIRMATION_OUTPUT_SCHEMA,
+            ui_resource_uri=WRITE_REVIEW_UI_URI,
+            invoking="Updating project brief...",
+            invoked="Project brief updated",
+        ),
+    )
     def create_or_update_project_brief(
         project: str,
         summary_delta: str,
@@ -433,7 +591,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             sensitivity=sensitivity,
         )
 
-    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], SEARCH_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(True),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE],
+            SEARCH_OUTPUT_SCHEMA,
+            ui_resource_uri=SEARCH_RESULTS_UI_URI,
+            invoking="Searching workstreams...",
+            invoked="Search results ready",
+        ),
+    )
     def search_workstream(query: str, project: str | None = None, limit: int = 20):
         """Search captured workstream content."""
         return app_tool_impl.search_workstream(query=query, project=project, limit=limit)
@@ -494,25 +662,58 @@ def create_mcp(config: WorkstreamConfig | None = None):
         """List open workstream tasks in an Apps SDK-safe structured format."""
         return app_tool_impl.list_open_tasks(project=project)
 
-    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], OBJECT_OUTPUT_SCHEMA, widget=True))
+    @mcp.tool(
+        annotations=_annotations(True),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE],
+            PROJECT_BRIEF_OUTPUT_SCHEMA,
+            ui_resource_uri=PROJECT_BRIEF_UI_URI,
+            invoking="Loading project brief...",
+            invoked="Project brief ready",
+        ),
+    )
     def get_project_brief(project: str):
         """Return an Apps SDK-safe project brief."""
         return app_tool_impl.get_project_brief(project=project)
 
     @mcp.resource(
-        PROJECT_BRIEF_WIDGET_URI,
+        PROJECT_BRIEF_UI_URI,
         mime_type="text/html;profile=mcp-app",
-        meta={
-            "ui": {
-                "prefersBorder": True,
-                "domain": config.public_base_url,
-                "csp": {"connectDomains": [config.public_base_url], "resourceDomains": []},
-            }
-        },
+        meta=_ui_resource_meta(
+            "Shows a Workstream project brief with recent decisions, open tasks, blockers, references, and session summaries."
+        ),
     )
-    def project_brief_widget() -> str:
-        """Minimal ChatGPT Apps SDK project brief widget."""
-        return _widget_html()
+    def project_brief_ui() -> str:
+        """MCP Apps project brief UI resource."""
+        return ui_resources.project_brief_html()
+
+    @mcp.resource(
+        SEARCH_RESULTS_UI_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Shows grouped Workstream search results with stable IDs, snippets, projects, and timestamps."),
+    )
+    def search_results_ui() -> str:
+        """MCP Apps search and timeline UI resource."""
+        return ui_resources.search_results_html()
+
+    @mcp.resource(
+        WRITE_REVIEW_UI_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Shows a review of a semantic Workstream write after an explicit tool invocation."),
+    )
+    def write_review_ui() -> str:
+        """MCP Apps write review UI resource."""
+        return ui_resources.write_review_html()
+
+    @mcp.resource(
+        LEGACY_PROJECT_BRIEF_WIDGET_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Legacy alias for the Workstream project brief UI resource."),
+    )
+    def legacy_project_brief_widget() -> str:
+        """Compatibility alias for the original project brief widget URI."""
+        return ui_resources.project_brief_html()
 
     @mcp.resource("workstream://today", mime_type="text/markdown")
     def today() -> str:

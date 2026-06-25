@@ -3,13 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import tomllib
 from pathlib import Path
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
+from jsonschema import validate
 from jwt.utils import base64url_encode
 from starlette.testclient import TestClient
 
+import workstream_mcp
 from workstream_mcp import app_tools
 from workstream_mcp.auth import READ_SCOPE, SENSITIVE_SCOPE, WRITE_SCOPE, JWTTokenVerifier, set_current_access_token
 from workstream_mcp.config import WorkstreamConfig, load_config
@@ -27,6 +30,7 @@ from workstream_mcp.tools import (
     record_chatgpt_decision,
     record_codex_session,
     record_codex_session_summary,
+    record_decision,
     record_openclaw_followup,
     record_session_handoff,
     search_workstream,
@@ -568,6 +572,22 @@ def test_http_app_exposes_health_and_ready_routes() -> None:
     assert "/.well-known/oauth-protected-resource" in paths
 
 
+def test_package_version_matches_project_metadata() -> None:
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    project_metadata = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+
+    assert workstream_mcp.__version__ == project_metadata["project"]["version"]
+
+
+def test_mcp_initialization_advertises_workstream_version() -> None:
+    from workstream_mcp.server import create_mcp
+
+    initialization = create_mcp()._mcp_server.create_initialization_options()
+
+    assert initialization.server_name == "dougal-workstream-mcp"
+    assert initialization.server_version == workstream_mcp.__version__
+
+
 def test_config_derives_and_accepts_allowed_hosts(tmp_path: Path, monkeypatch) -> None:
     from workstream_mcp.server import create_http_app
 
@@ -658,7 +678,7 @@ def test_oauth_token_verifier_rejects_invalid_expired_and_wrong_scope(tmp_path: 
 
 
 def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schema(tmp_path: Path) -> None:
-    from workstream_mcp.server import create_mcp
+    from workstream_mcp.server import PROJECT_BRIEF_UI_URI, SEARCH_RESULTS_UI_URI, WRITE_REVIEW_UI_URI, create_mcp
 
     config, _key = _oauth_config(tmp_path)
     tools = {tool.name: tool for tool in asyncio.run(create_mcp(config).list_tools())}
@@ -666,9 +686,23 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     brief = tools["get_project_brief"]
     assert brief.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE]}]
     assert brief.meta["securitySchemes"] == brief.securitySchemes
-    assert brief.meta["openai/outputTemplate"] == "ui://widget/project-brief-v1.html"
-    assert brief.outputSchema["type"] == "object"
+    assert brief.meta["ui"]["resourceUri"] == PROJECT_BRIEF_UI_URI
+    assert brief.meta["openai/outputTemplate"] == PROJECT_BRIEF_UI_URI
+    assert brief.meta["openai/toolInvocation/invoking"] == "Loading project brief..."
+    assert brief.meta["openai/toolInvocation/invoked"] == "Project brief ready"
+    assert brief.outputSchema["properties"]["project"]["type"] == "object"
     assert brief.annotations.readOnlyHint is True
+
+    search = tools["search_workstream"]
+    assert search.meta["ui"]["resourceUri"] == SEARCH_RESULTS_UI_URI
+    assert search.meta["openai/outputTemplate"] == SEARCH_RESULTS_UI_URI
+    assert search.annotations.readOnlyHint is True
+    assert search.outputSchema["required"] == ["query", "count", "results"]
+
+    decision = tools["record_decision"]
+    assert decision.meta["ui"]["resourceUri"] == WRITE_REVIEW_UI_URI
+    assert decision.meta["openai/toolInvocation/invoking"] == "Recording decision..."
+    assert decision.annotations.readOnlyHint is False
 
     capture = tools["capture_handoff"]
     assert capture.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE, WRITE_SCOPE]}]
@@ -676,6 +710,27 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     assert capture.annotations.readOnlyHint is False
     assert capture.annotations.openWorldHint is False
     assert capture.annotations.destructiveHint is False
+    assert capture.annotations.idempotentHint is False
+
+
+def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> None:
+    from workstream_mcp.server import PROJECT_BRIEF_UI_URI, SEARCH_RESULTS_UI_URI, WRITE_REVIEW_UI_URI, create_mcp
+
+    mcp = create_mcp()
+    resources = {str(resource.uri): resource for resource in asyncio.run(mcp.list_resources())}
+
+    for uri in [PROJECT_BRIEF_UI_URI, SEARCH_RESULTS_UI_URI, WRITE_REVIEW_UI_URI]:
+        resource = resources[uri]
+        assert resource.mimeType == "text/html;profile=mcp-app"
+        assert resource.meta["ui"]["prefersBorder"] is True
+        assert resource.meta["ui"]["csp"] == {"connectDomains": [], "resourceDomains": []}
+        assert resource.meta["openai/widgetPrefersBorder"] is True
+        assert resource.meta["openai/widgetCSP"] == {"connect_domains": [], "resource_domains": []}
+        assert resource.meta["openai/widgetDescription"]
+        contents = asyncio.run(mcp.read_resource(uri))
+        assert contents[0].mime_type == "text/html;profile=mcp-app"
+        assert "ui/notifications/tool-result" in contents[0].content
+        assert "window.openai" in contents[0].content
 
 
 def test_chatgpt_safe_project_brief_redacts_sensitive_rows_paths_and_commands(tmp_path: Path) -> None:
@@ -740,6 +795,114 @@ def test_chatgpt_safe_project_brief_can_include_sensitive_rows_with_scope(tmp_pa
     finally:
         reset_current_access_token(token)
     assert "Scoped sensitive task" in json.dumps(result.structuredContent)
+
+
+def test_project_brief_tool_result_is_portable_schema_valid_and_ui_hydratable(tmp_path: Path) -> None:
+    from workstream_mcp.server import PROJECT_BRIEF_OUTPUT_SCHEMA
+
+    db_path = tmp_path / "workstream.db"
+    record_session_handoff(
+        project="Apps Contract",
+        source="chatgpt",
+        title="Apps handoff",
+        summary="Harden portable MCP contracts.",
+        decisions=[{"title": "Keep UI optional", "summary": "Clients can ignore iframe rendering."}],
+        tasks=[{"title": "Validate output schemas", "priority": "high"}],
+        blockers=[{"title": "Need host verification"}],
+        references=[{"label": "MCP Apps reference", "uri": "https://developers.openai.com/apps-sdk/reference"}],
+        db_path=db_path,
+    )
+    record_codex_session_summary(
+        project="Apps Contract",
+        title="Implemented contract tests",
+        summary="Added descriptor and resource assertions.",
+        files_changed=["src/workstream_mcp/server.py"],
+        tests_run=["pytest"],
+        db_path=db_path,
+    )
+    create_or_update_project_brief(
+        project="Apps Contract",
+        summary_delta="Portable results are the primary contract.",
+        status="active",
+        current_state="Adding MCP Apps UI resources.",
+        next_steps=["Run tests"],
+        risks=["Avoid ChatGPT lock-in"],
+        db_path=db_path,
+    )
+
+    result = app_tools.get_project_brief("Apps Contract", db_path=db_path)
+
+    assert result.content
+    assert "Project brief: Apps Contract" in result.content[0].text
+    assert "Open tasks:" in result.content[0].text
+    validate(instance=result.structuredContent, schema=PROJECT_BRIEF_OUTPUT_SCHEMA)
+    assert result.structuredContent["project"]["slug"] == "apps-contract"
+    assert result.structuredContent["open_tasks"]
+    assert result.structuredContent["decisions"]
+    assert result.structuredContent["open_blockers"]
+    assert result.structuredContent["references"]
+    assert result.structuredContent["codex_sessions"]
+    assert result.meta["defaultView"] == "overview"
+    assert result.meta["tasksById"]
+    assert result.meta["decisionsById"]
+    assert result.meta["blockersById"]
+    assert result.meta["referencesById"]
+    assert result.meta["sessionsById"]
+
+
+def test_project_brief_empty_states_remain_useful_without_meta(tmp_path: Path) -> None:
+    db_path = tmp_path / "workstream.db"
+    record_decision(
+        project="Empty State",
+        title="Only decision recorded",
+        summary="No open work exists yet.",
+        rationale="This validates sparse project briefs.",
+        db_path=db_path,
+    )
+
+    result = app_tools.get_project_brief("Empty State", db_path=db_path)
+    without_meta = result.model_copy(update={"meta": {}})
+
+    assert "Project brief: Empty State" in without_meta.content[0].text
+    assert without_meta.structuredContent["open_tasks"] == []
+    assert without_meta.structuredContent["open_blockers"] == []
+    assert without_meta.structuredContent["decisions"][0]["title"] == "Only decision recorded"
+
+
+def test_search_tool_result_shape_groups_mixed_result_kinds(tmp_path: Path) -> None:
+    from workstream_mcp.server import SEARCH_OUTPUT_SCHEMA
+
+    db_path = tmp_path / "workstream.db"
+    record_session_handoff(
+        project="Search Contract",
+        source="chatgpt",
+        title="Timeline search",
+        summary="Portable search result.",
+        decisions=[{"title": "Search returns stable IDs", "summary": "Every result exposes kind:id."}],
+        tasks=[{"title": "Search task result"}],
+        blockers=[{"title": "Search blocker result"}],
+        references=[{"label": "Search reference", "uri": "https://example.test/search-contract"}],
+        db_path=db_path,
+    )
+    record_codex_session_summary(
+        project="Search Contract",
+        title="Search session result",
+        summary="Search session summary.",
+        tests_run=["pytest"],
+        db_path=db_path,
+    )
+
+    result = app_tools.search_workstream("Search", project="Search Contract", db_path=db_path)
+    kinds = {row["kind"] for row in result.structuredContent["results"]}
+
+    assert result.content
+    assert "Search results for 'Search':" in result.content[0].text
+    validate(instance=result.structuredContent, schema=SEARCH_OUTPUT_SCHEMA)
+    assert {"event", "task", "decision", "blocker", "reference", "codex_session"} <= kinds
+    assert all(row["stable_id"] == f"{row['kind']}:{row['id']}" for row in result.structuredContent["results"])
+    assert result.meta["defaultView"] == "grouped"
+    assert set(result.meta["timelineGroups"]) >= kinds
+    assert result.meta["resultsById"]
 
 
 def test_compose_binds_container_to_localhost_only() -> None:
