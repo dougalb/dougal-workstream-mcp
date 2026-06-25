@@ -683,6 +683,10 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     config, _key = _oauth_config(tmp_path)
     tools = {tool.name: tool for tool in asyncio.run(create_mcp(config).list_tools())}
 
+    assert PROJECT_BRIEF_UI_URI == "ui://workstreams/project-brief-v2.html"
+    assert SEARCH_RESULTS_UI_URI == "ui://workstreams/search-results-v2.html"
+    assert WRITE_REVIEW_UI_URI == "ui://workstreams/write-review-v2.html"
+
     brief = tools["get_project_brief"]
     assert brief.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE]}]
     assert brief.meta["securitySchemes"] == brief.securitySchemes
@@ -720,12 +724,31 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
 
 
 def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> None:
-    from workstream_mcp.server import PROJECT_BRIEF_UI_URI, SEARCH_RESULTS_UI_URI, WRITE_REVIEW_UI_URI, create_mcp
+    from workstream_mcp.server import (
+        LEGACY_PROJECT_BRIEF_WIDGET_URI,
+        PROJECT_BRIEF_UI_ALIAS_URI,
+        PROJECT_BRIEF_UI_URI,
+        SEARCH_RESULTS_UI_ALIAS_URI,
+        SEARCH_RESULTS_UI_URI,
+        WRITE_REVIEW_UI_ALIAS_URI,
+        WRITE_REVIEW_UI_URI,
+        create_mcp,
+    )
 
     mcp = create_mcp()
     resources = {str(resource.uri): resource for resource in asyncio.run(mcp.list_resources())}
 
-    for uri in [PROJECT_BRIEF_UI_URI, SEARCH_RESULTS_UI_URI, WRITE_REVIEW_UI_URI]:
+    expected_uris = [
+        PROJECT_BRIEF_UI_URI,
+        SEARCH_RESULTS_UI_URI,
+        WRITE_REVIEW_UI_URI,
+        PROJECT_BRIEF_UI_ALIAS_URI,
+        SEARCH_RESULTS_UI_ALIAS_URI,
+        WRITE_REVIEW_UI_ALIAS_URI,
+        LEGACY_PROJECT_BRIEF_WIDGET_URI,
+    ]
+
+    for uri in expected_uris:
         resource = resources[uri]
         assert resource.mimeType == "text/html;profile=mcp-app"
         assert resource.meta["ui"]["prefersBorder"] is True
@@ -741,7 +764,30 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         assert "toolOutput" in contents[0].content
         assert "mcp_tool_result" in contents[0].content
         assert "workstreams-ui" in contents[0].content
+        assert "app-frame" in contents[0].content
         assert "overflow-x: hidden" in contents[0].content
+        assert "<script src" not in contents[0].content
+        assert "https://" not in contents[0].content
+        assert "http://" not in contents[0].content
+
+
+def test_search_results_ui_uses_compact_responsive_rows() -> None:
+    from workstream_mcp import ui_resources
+
+    html = ui_resources.search_results_html()
+
+    assert 'class="workstreams-ui workstreams-search-results"' in html
+    assert 'class="app-frame"' in html
+    assert "result-row" in html
+    assert "result-topline" in html
+    assert "meta-row" in html
+    assert "snippet-collapse" in html
+    assert "Show full snippet" in html
+    assert 'event: "Events"' in html
+    assert 'codex_session: "Codex sessions"' in html
+    assert "<ul" not in html
+    assert "<li" not in html
+    assert "@media (max-width: 560px)" in html
 
 
 def test_chatgpt_safe_project_brief_redacts_sensitive_rows_paths_and_commands(tmp_path: Path) -> None:

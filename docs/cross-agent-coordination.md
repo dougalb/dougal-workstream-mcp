@@ -69,7 +69,7 @@ Workstreams exposes optional MCP Apps UI resources for clients that can render t
 
 - Plain MCP clients should read `content` and the advertised output schemas.
 - Structured MCP clients should parse `structuredContent`.
-- MCP Apps-capable clients may render `ui://workstreams/project-brief.html`, `ui://workstreams/search-results.html`, or `ui://workstreams/write-review.html` and use tool-result `_meta` as UI hydration data.
+- MCP Apps-capable clients may render the advertised versioned UI resources such as `ui://workstreams/project-brief-v2.html`, `ui://workstreams/search-results-v2.html`, or `ui://workstreams/write-review-v2.html` and use tool-result `_meta` as UI hydration data. The unversioned `ui://workstreams/*.html` resources remain compatibility aliases.
 
 Do not put secrets, raw email bodies, private raw records, or required model-visible data in tool-result `_meta`. If `_meta` is ignored, the result must remain complete and useful through `content` and `structuredContent`.
 

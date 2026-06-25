@@ -197,9 +197,11 @@ Read tools return concise `content` text for older text-only clients and schema-
 
 The current MCP Apps UI resources are:
 
-- `ui://workstreams/project-brief.html`, advertised by `get_project_brief`.
-- `ui://workstreams/search-results.html`, advertised by `search_workstream`.
-- `ui://workstreams/write-review.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
+- `ui://workstreams/project-brief-v2.html`, advertised by `get_project_brief`.
+- `ui://workstreams/search-results-v2.html`, advertised by `search_workstream`.
+- `ui://workstreams/write-review-v2.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
+
+The unversioned `ui://workstreams/*.html` resources remain registered as compatibility aliases, and `ui://widget/project-brief-v1.html` remains available for older ChatGPT widget cache entries.
 
 The server uses standard MCP Apps metadata first:
 
@@ -281,6 +283,10 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - blocker status transitions: `open`, `resolved`.
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
+
+## v0.5.3 Notes
+
+v0.5.3 redesigns the MCP Apps UI resources around a compact responsive shell, advertises versioned v2 resource URIs to bypass stale ChatGPT widget caches, and keeps the previous UI resource URIs as compatibility aliases.
 
 ## v0.5.2 Notes
 

@@ -14,9 +14,12 @@ from .auth import reset_current_access_token, set_current_access_token
 from .config import WorkstreamConfig, configure_logging, load_config
 from .db import WorkstreamDB
 
-PROJECT_BRIEF_UI_URI = "ui://workstreams/project-brief.html"
-SEARCH_RESULTS_UI_URI = "ui://workstreams/search-results.html"
-WRITE_REVIEW_UI_URI = "ui://workstreams/write-review.html"
+PROJECT_BRIEF_UI_URI = "ui://workstreams/project-brief-v2.html"
+SEARCH_RESULTS_UI_URI = "ui://workstreams/search-results-v2.html"
+WRITE_REVIEW_UI_URI = "ui://workstreams/write-review-v2.html"
+PROJECT_BRIEF_UI_ALIAS_URI = "ui://workstreams/project-brief.html"
+SEARCH_RESULTS_UI_ALIAS_URI = "ui://workstreams/search-results.html"
+WRITE_REVIEW_UI_ALIAS_URI = "ui://workstreams/write-review.html"
 LEGACY_PROJECT_BRIEF_WIDGET_URI = "ui://widget/project-brief-v1.html"
 
 OBJECT_OUTPUT_SCHEMA = {"type": "object", "additionalProperties": True}
@@ -705,6 +708,33 @@ def create_mcp(config: WorkstreamConfig | None = None):
     )
     def write_review_ui() -> str:
         """MCP Apps write review UI resource."""
+        return ui_resources.write_review_html()
+
+    @mcp.resource(
+        PROJECT_BRIEF_UI_ALIAS_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Compatibility alias for the Workstream project brief UI resource."),
+    )
+    def project_brief_ui_alias() -> str:
+        """Compatibility alias for the unversioned project brief UI resource."""
+        return ui_resources.project_brief_html()
+
+    @mcp.resource(
+        SEARCH_RESULTS_UI_ALIAS_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Compatibility alias for the Workstream search results UI resource."),
+    )
+    def search_results_ui_alias() -> str:
+        """Compatibility alias for the unversioned search results UI resource."""
+        return ui_resources.search_results_html()
+
+    @mcp.resource(
+        WRITE_REVIEW_UI_ALIAS_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Compatibility alias for the Workstream write review UI resource."),
+    )
+    def write_review_ui_alias() -> str:
+        """Compatibility alias for the unversioned write review UI resource."""
         return ui_resources.write_review_html()
 
     @mcp.resource(
