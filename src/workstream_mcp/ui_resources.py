@@ -69,8 +69,18 @@ function latestResultFromOpenAI() {
   if (!bridge) return null;
   const meta = bridge.toolResponseMetadata;
   if (meta?.mcp_tool_result) return meta.mcp_tool_result;
+  if (meta?.call_tool_result) return meta.call_tool_result;
   if (bridge.toolOutput) return { structuredContent: bridge.toolOutput, _meta: meta || {} };
   return null;
+}
+
+function resultFromGlobals(globals) {
+  if (!globals) return null;
+  const meta = globals.toolResponseMetadata;
+  if (meta?.mcp_tool_result) return meta.mcp_tool_result;
+  if (meta?.call_tool_result) return meta.call_tool_result;
+  if (globals.toolOutput) return { structuredContent: globals.toolOutput, _meta: meta || {} };
+  return latestResultFromOpenAI();
 }
 
 function acceptResult(result) {
@@ -85,7 +95,13 @@ window.addEventListener("message", (event) => {
   if (message?.method === "ui/notifications/tool-result") acceptResult(message.params);
 }, { passive: true });
 
+window.addEventListener("openai:set_globals", (event) => {
+  acceptResult(resultFromGlobals(event.detail?.globals));
+}, { passive: true });
+
 acceptResult(latestResultFromOpenAI());
+setTimeout(() => acceptResult(latestResultFromOpenAI()), 50);
+setTimeout(() => acceptResult(latestResultFromOpenAI()), 500);
 """
 
 

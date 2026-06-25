@@ -731,6 +731,9 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         assert contents[0].mime_type == "text/html;profile=mcp-app"
         assert "ui/notifications/tool-result" in contents[0].content
         assert "window.openai" in contents[0].content
+        assert "openai:set_globals" in contents[0].content
+        assert "toolOutput" in contents[0].content
+        assert "mcp_tool_result" in contents[0].content
 
 
 def test_chatgpt_safe_project_brief_redacts_sensitive_rows_paths_and_commands(tmp_path: Path) -> None:
