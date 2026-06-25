@@ -197,11 +197,11 @@ Read tools return concise `content` text for older text-only clients and schema-
 
 The current MCP Apps UI resources are:
 
-- `ui://workstreams/project-brief-v2.html`, advertised by `get_project_brief`.
-- `ui://workstreams/search-results-v2.html`, advertised by `search_workstream`.
-- `ui://workstreams/write-review-v2.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
+- `ui://workstreams/project-brief-v3.html`, advertised by `get_project_brief`.
+- `ui://workstreams/search-results-v3.html`, advertised by `search_workstream`.
+- `ui://workstreams/write-review-v3.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
 
-The unversioned `ui://workstreams/*.html` resources remain registered as compatibility aliases, and `ui://widget/project-brief-v1.html` remains available for older ChatGPT widget cache entries.
+The v2 and unversioned `ui://workstreams/*.html` resources remain registered as compatibility aliases, and `ui://widget/project-brief-v1.html` remains available for older ChatGPT widget cache entries.
 
 The server uses standard MCP Apps metadata first:
 
@@ -283,6 +283,10 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - blocker status transitions: `open`, `resolved`.
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
+
+## v0.5.4 Notes
+
+v0.5.4 advertises v3 MCP Apps UI resources and adds an outer safe-area inset so ChatGPT's rounded iframe clipping does not cut into widget text near the corners.
 
 ## v0.5.3 Notes
 

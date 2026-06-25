@@ -683,9 +683,9 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     config, _key = _oauth_config(tmp_path)
     tools = {tool.name: tool for tool in asyncio.run(create_mcp(config).list_tools())}
 
-    assert PROJECT_BRIEF_UI_URI == "ui://workstreams/project-brief-v2.html"
-    assert SEARCH_RESULTS_UI_URI == "ui://workstreams/search-results-v2.html"
-    assert WRITE_REVIEW_UI_URI == "ui://workstreams/write-review-v2.html"
+    assert PROJECT_BRIEF_UI_URI == "ui://workstreams/project-brief-v3.html"
+    assert SEARCH_RESULTS_UI_URI == "ui://workstreams/search-results-v3.html"
+    assert WRITE_REVIEW_UI_URI == "ui://workstreams/write-review-v3.html"
 
     brief = tools["get_project_brief"]
     assert brief.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE]}]
@@ -728,10 +728,13 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         LEGACY_PROJECT_BRIEF_WIDGET_URI,
         PROJECT_BRIEF_UI_ALIAS_URI,
         PROJECT_BRIEF_UI_URI,
+        PROJECT_BRIEF_UI_V2_ALIAS_URI,
         SEARCH_RESULTS_UI_ALIAS_URI,
         SEARCH_RESULTS_UI_URI,
+        SEARCH_RESULTS_UI_V2_ALIAS_URI,
         WRITE_REVIEW_UI_ALIAS_URI,
         WRITE_REVIEW_UI_URI,
+        WRITE_REVIEW_UI_V2_ALIAS_URI,
         create_mcp,
     )
 
@@ -742,6 +745,9 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         PROJECT_BRIEF_UI_URI,
         SEARCH_RESULTS_UI_URI,
         WRITE_REVIEW_UI_URI,
+        PROJECT_BRIEF_UI_V2_ALIAS_URI,
+        SEARCH_RESULTS_UI_V2_ALIAS_URI,
+        WRITE_REVIEW_UI_V2_ALIAS_URI,
         PROJECT_BRIEF_UI_ALIAS_URI,
         SEARCH_RESULTS_UI_ALIAS_URI,
         WRITE_REVIEW_UI_ALIAS_URI,
@@ -765,6 +771,7 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         assert "mcp_tool_result" in contents[0].content
         assert "workstreams-ui" in contents[0].content
         assert "app-frame" in contents[0].content
+        assert "--safe-block-start" in contents[0].content
         assert "overflow-x: hidden" in contents[0].content
         assert "<script src" not in contents[0].content
         assert "https://" not in contents[0].content
@@ -778,6 +785,7 @@ def test_search_results_ui_uses_compact_responsive_rows() -> None:
 
     assert 'class="workstreams-ui workstreams-search-results"' in html
     assert 'class="app-frame"' in html
+    assert "padding: var(--safe-block-start) var(--safe-inline) var(--safe-block-end)" in html
     assert "result-row" in html
     assert "result-topline" in html
     assert "meta-row" in html

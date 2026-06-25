@@ -20,6 +20,9 @@ def _base_html(title: str, body: str, script: str) -> str:
       --muted: #57606a;
       --accent: #0969da;
       --warning: #9a6700;
+      --safe-inline: 20px;
+      --safe-block-start: 24px;
+      --safe-block-end: 20px;
     }}
     @media (prefers-color-scheme: dark) {{
       :root {{
@@ -43,11 +46,16 @@ def _base_html(title: str, body: str, script: str) -> str:
       color: var(--text);
       font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }}
-    .workstreams-ui {{ width: 100%; min-width: 0; background: var(--bg); }}
+    .workstreams-ui {{
+      width: 100%;
+      min-width: 0;
+      padding: var(--safe-block-start) var(--safe-inline) var(--safe-block-end);
+      background: var(--bg);
+    }}
     .app-frame {{
       width: 100%;
       min-width: 0;
-      padding: 18px 20px 20px;
+      padding: 0;
       display: grid;
       gap: 14px;
       overflow: hidden;
@@ -136,8 +144,9 @@ def _base_html(title: str, body: str, script: str) -> str:
     .empty {{ margin: 0; color: var(--muted); font-style: italic; }}
     .warning-row {{ border-color: var(--warning); background: color-mix(in srgb, var(--warning) 12%, var(--surface)); }}
     @media (max-width: 560px) {{
+      :root {{ --safe-inline: 18px; --safe-block-start: 30px; --safe-block-end: 20px; }}
       body {{ font-size: 14px; }}
-      .app-frame {{ padding: 14px 16px 16px; gap: 12px; }}
+      .app-frame {{ gap: 12px; }}
       h1 {{ font-size: 17px; }}
       .summary-chip {{ font-size: 11px; }}
       .result-row {{ padding: 10px; }}
