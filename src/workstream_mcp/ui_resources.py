@@ -15,8 +15,9 @@ def _base_html(title: str, body: str, script: str) -> str:
       :root {{ --border: #30363d; --muted: #8b949e; --bg: #0d1117; --soft: #161b22; --text: #e6edf3; }}
     }}
     * {{ box-sizing: border-box; }}
-    body {{ margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
-    main {{ padding: 14px; display: grid; gap: 12px; }}
+    html {{ min-width: 0; background: var(--bg); }}
+    body {{ margin: 0; min-width: 0; overflow-x: hidden; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    main {{ width: 100%; min-width: 0; padding: 16px 18px 18px; display: grid; gap: 12px; overflow-wrap: anywhere; }}
     header {{ display: grid; gap: 4px; }}
     h1 {{ font-size: 18px; margin: 0; line-height: 1.25; }}
     h2 {{ font-size: 13px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0; color: var(--muted); }}
@@ -24,7 +25,7 @@ def _base_html(title: str, body: str, script: str) -> str:
     ul {{ margin: 0; padding-left: 18px; }}
     li {{ margin: 4px 0; }}
     .muted {{ color: var(--muted); }}
-    .grid {{ display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }}
+    .grid {{ display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); min-width: 0; }}
     .pill {{ display: inline-block; border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; font-size: 12px; color: var(--muted); }}
     .item {{ padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); }}
     .item-title {{ font-weight: 600; overflow-wrap: anywhere; }}
@@ -32,6 +33,10 @@ def _base_html(title: str, body: str, script: str) -> str:
     .empty {{ color: var(--muted); font-style: italic; }}
     .warning {{ border-color: #bf8700; background: color-mix(in srgb, #bf8700 12%, var(--soft)); }}
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }}
+    @media (max-width: 560px) {{
+      main {{ padding: 14px 16px 16px; }}
+      .grid {{ grid-template-columns: 1fr; }}
+    }}
   </style>
 </head>
 <body>
@@ -106,7 +111,7 @@ setTimeout(() => acceptResult(latestResultFromOpenAI()), 500);
 
 
 def project_brief_html() -> str:
-    body = '<main id="root"><p class="empty">Loading project brief...</p></main>'
+    body = '<main id="root" class="workstreams-ui workstreams-project-brief"><p class="empty">Loading project brief...</p></main>'
     script = (
         COMMON_SCRIPT
         + r"""
@@ -148,7 +153,7 @@ function render(result) {
 
 
 def search_results_html() -> str:
-    body = '<main id="root"><p class="empty">Loading search results...</p></main>'
+    body = '<main id="root" class="workstreams-ui workstreams-search-results"><p class="empty">Loading search results...</p></main>'
     script = (
         COMMON_SCRIPT
         + r"""
@@ -190,7 +195,7 @@ function render(result) {
 
 
 def write_review_html() -> str:
-    body = '<main id="root"><p class="empty">Waiting for semantic write result...</p></main>'
+    body = '<main id="root" class="workstreams-ui workstreams-write-review"><p class="empty">Waiting for semantic write result...</p></main>'
     script = (
         COMMON_SCRIPT
         + r"""

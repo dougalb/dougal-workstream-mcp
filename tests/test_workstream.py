@@ -687,7 +687,9 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     assert brief.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE]}]
     assert brief.meta["securitySchemes"] == brief.securitySchemes
     assert brief.meta["ui"]["resourceUri"] == PROJECT_BRIEF_UI_URI
+    assert brief.meta["ui"]["visibility"] == ["conversation", "component"]
     assert brief.meta["openai/outputTemplate"] == PROJECT_BRIEF_UI_URI
+    assert brief.meta["openai/widgetAccessible"] is True
     assert brief.meta["openai/toolInvocation/invoking"] == "Loading project brief..."
     assert brief.meta["openai/toolInvocation/invoked"] == "Project brief ready"
     assert brief.outputSchema["properties"]["project"]["type"] == "object"
@@ -695,12 +697,16 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
 
     search = tools["search_workstream"]
     assert search.meta["ui"]["resourceUri"] == SEARCH_RESULTS_UI_URI
+    assert search.meta["ui"]["visibility"] == ["conversation", "component"]
     assert search.meta["openai/outputTemplate"] == SEARCH_RESULTS_UI_URI
+    assert search.meta["openai/widgetAccessible"] is True
     assert search.annotations.readOnlyHint is True
     assert search.outputSchema["required"] == ["query", "count", "results"]
 
     decision = tools["record_decision"]
     assert decision.meta["ui"]["resourceUri"] == WRITE_REVIEW_UI_URI
+    assert decision.meta["ui"]["visibility"] == ["conversation", "component"]
+    assert decision.meta["openai/widgetAccessible"] is True
     assert decision.meta["openai/toolInvocation/invoking"] == "Recording decision..."
     assert decision.annotations.readOnlyHint is False
 
@@ -734,6 +740,8 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         assert "openai:set_globals" in contents[0].content
         assert "toolOutput" in contents[0].content
         assert "mcp_tool_result" in contents[0].content
+        assert "workstreams-ui" in contents[0].content
+        assert "overflow-x: hidden" in contents[0].content
 
 
 def test_chatgpt_safe_project_brief_redacts_sensitive_rows_paths_and_commands(tmp_path: Path) -> None:

@@ -282,6 +282,10 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
 
+## v0.5.2 Notes
+
+v0.5.2 adds explicit MCP Apps UI visibility metadata for UI-capable tools, keeps the ChatGPT `openai/widgetAccessible` compatibility flag enabled, and tightens iframe layout spacing/wrapping for Apps components.
+
 ## v0.5.1 Notes
 
 v0.5.1 fixes ChatGPT UI hydration for Apps components that receive `window.openai` globals after iframe mount.
