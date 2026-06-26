@@ -14,9 +14,12 @@ from .auth import reset_current_access_token, set_current_access_token
 from .config import WorkstreamConfig, configure_logging, load_config
 from .db import WorkstreamDB
 
-PROJECT_BRIEF_UI_URI = "ui://workstreams/project-brief-v3.html"
-SEARCH_RESULTS_UI_URI = "ui://workstreams/search-results-v3.html"
-WRITE_REVIEW_UI_URI = "ui://workstreams/write-review-v3.html"
+PROJECT_BRIEF_UI_URI = "ui://workstreams/project-brief-v4.html"
+SEARCH_RESULTS_UI_URI = "ui://workstreams/search-results-v4.html"
+WRITE_REVIEW_UI_URI = "ui://workstreams/write-review-v4.html"
+PROJECT_BRIEF_UI_V3_ALIAS_URI = "ui://workstreams/project-brief-v3.html"
+SEARCH_RESULTS_UI_V3_ALIAS_URI = "ui://workstreams/search-results-v3.html"
+WRITE_REVIEW_UI_V3_ALIAS_URI = "ui://workstreams/write-review-v3.html"
 PROJECT_BRIEF_UI_V2_ALIAS_URI = "ui://workstreams/project-brief-v2.html"
 SEARCH_RESULTS_UI_V2_ALIAS_URI = "ui://workstreams/search-results-v2.html"
 WRITE_REVIEW_UI_V2_ALIAS_URI = "ui://workstreams/write-review-v2.html"
@@ -613,7 +616,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
         """Search captured workstream content."""
         return app_tool_impl.search_workstream(query=query, project=project, limit=limit)
 
-    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], EVENTS_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(True),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE],
+            EVENTS_OUTPUT_SCHEMA,
+            ui_resource_uri=SEARCH_RESULTS_UI_URI,
+            invoking="Loading recent changes...",
+            invoked="Recent changes ready",
+        ),
+    )
     def list_recent_changes_since(
         project: str | None = None,
         since_event_id: int | None = None,
@@ -638,7 +651,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
             order=order,
         )
 
-    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], DIGEST_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(True),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE],
+            DIGEST_OUTPUT_SCHEMA,
+            ui_resource_uri=SEARCH_RESULTS_UI_URI,
+            invoking="Loading workstream digest...",
+            invoked="Digest ready",
+        ),
+    )
     def get_agent_digest(
         agent: str,
         project: str | None = None,
@@ -664,7 +687,17 @@ def create_mcp(config: WorkstreamConfig | None = None):
         """List projects in an Apps SDK-safe structured format."""
         return app_tool_impl.list_projects()
 
-    @mcp.tool(annotations=_annotations(True), meta=_tool_meta(config, [READ_SCOPE], TASKS_OUTPUT_SCHEMA))
+    @mcp.tool(
+        annotations=_annotations(True),
+        meta=_tool_meta(
+            config,
+            [READ_SCOPE],
+            TASKS_OUTPUT_SCHEMA,
+            ui_resource_uri=SEARCH_RESULTS_UI_URI,
+            invoking="Loading open tasks...",
+            invoked="Open tasks ready",
+        ),
+    )
     def list_open_tasks(project: str | None = None):
         """List open workstream tasks in an Apps SDK-safe structured format."""
         return app_tool_impl.list_open_tasks(project=project)
@@ -711,6 +744,33 @@ def create_mcp(config: WorkstreamConfig | None = None):
     )
     def write_review_ui() -> str:
         """MCP Apps write review UI resource."""
+        return ui_resources.write_review_html()
+
+    @mcp.resource(
+        PROJECT_BRIEF_UI_V3_ALIAS_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Compatibility alias for the Workstream project brief v3 UI resource."),
+    )
+    def project_brief_ui_v3_alias() -> str:
+        """Compatibility alias for the v3 project brief UI resource."""
+        return ui_resources.project_brief_html()
+
+    @mcp.resource(
+        SEARCH_RESULTS_UI_V3_ALIAS_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Compatibility alias for the Workstream search results v3 UI resource."),
+    )
+    def search_results_ui_v3_alias() -> str:
+        """Compatibility alias for the v3 search results UI resource."""
+        return ui_resources.search_results_html()
+
+    @mcp.resource(
+        WRITE_REVIEW_UI_V3_ALIAS_URI,
+        mime_type="text/html;profile=mcp-app",
+        meta=_ui_resource_meta("Compatibility alias for the Workstream write review v3 UI resource."),
+    )
+    def write_review_ui_v3_alias() -> str:
+        """Compatibility alias for the v3 write review UI resource."""
         return ui_resources.write_review_html()
 
     @mcp.resource(

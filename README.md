@@ -197,11 +197,11 @@ Read tools return concise `content` text for older text-only clients and schema-
 
 The current MCP Apps UI resources are:
 
-- `ui://workstreams/project-brief-v3.html`, advertised by `get_project_brief`.
-- `ui://workstreams/search-results-v3.html`, advertised by `search_workstream`.
-- `ui://workstreams/write-review-v3.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
+- `ui://workstreams/project-brief-v4.html`, advertised by `get_project_brief`.
+- `ui://workstreams/search-results-v4.html`, advertised by `search_workstream`, `list_recent_changes_since`, `get_agent_digest`, and `list_open_tasks`.
+- `ui://workstreams/write-review-v4.html`, advertised by semantic write tools such as `record_decision`, `record_task`, `record_session_handoff`, `record_codex_session`, `record_codex_session_summary`, and `create_or_update_project_brief`.
 
-The v2 and unversioned `ui://workstreams/*.html` resources remain registered as compatibility aliases, and `ui://widget/project-brief-v1.html` remains available for older ChatGPT widget cache entries.
+The v3, v2, and unversioned `ui://workstreams/*.html` resources remain registered as compatibility aliases, and `ui://widget/project-brief-v1.html` remains available for older ChatGPT widget cache entries.
 
 The server uses standard MCP Apps metadata first:
 
@@ -221,6 +221,8 @@ For ChatGPT compatibility, descriptors and resources also include OpenAI aliases
 The HTML resources are dependency-free, use the standard `ui/notifications/tool-result` bridge, and feature-detect `window.openai` before using ChatGPT-specific bridge state. Their CSP metadata keeps `connectDomains` and `resourceDomains` empty because the widgets are self-contained.
 
 Codex, OpenClaw, Claude, Cline, and other plain MCP clients should keep consuming the same tools through text and structured JSON. They should not rely on the Apps UI resources or ChatGPT-specific aliases.
+
+If ChatGPT is configured to allow only low-risk app actions, write tools such as `record_decision` may be hidden by the host even though the MCP server advertises them. Use a permission mode that asks for or allows write actions when validating semantic write capture.
 
 ## HTTP / ChatGPT Apps SDK Compatibility
 
@@ -283,6 +285,10 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - blocker status transitions: `open`, `resolved`.
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
+
+## v0.5.5 Notes
+
+v0.5.5 advertises v4 MCP Apps UI resources and makes the search/timeline widget tolerant of the alternate read tools ChatGPT may choose for the same user prompt. `list_recent_changes_since`, `get_agent_digest`, and `list_open_tasks` now advertise the search/timeline UI resource, and the component normalizes `events`, `tasks`, `unconsumed_events`, `assigned_open_tasks`, `open_blockers`, and `recent_decisions` into grouped timeline rows.
 
 ## v0.5.4 Notes
 

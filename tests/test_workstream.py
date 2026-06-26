@@ -683,9 +683,9 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     config, _key = _oauth_config(tmp_path)
     tools = {tool.name: tool for tool in asyncio.run(create_mcp(config).list_tools())}
 
-    assert PROJECT_BRIEF_UI_URI == "ui://workstreams/project-brief-v3.html"
-    assert SEARCH_RESULTS_UI_URI == "ui://workstreams/search-results-v3.html"
-    assert WRITE_REVIEW_UI_URI == "ui://workstreams/write-review-v3.html"
+    assert PROJECT_BRIEF_UI_URI == "ui://workstreams/project-brief-v4.html"
+    assert SEARCH_RESULTS_UI_URI == "ui://workstreams/search-results-v4.html"
+    assert WRITE_REVIEW_UI_URI == "ui://workstreams/write-review-v4.html"
 
     brief = tools["get_project_brief"]
     assert brief.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE]}]
@@ -706,6 +706,24 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     assert search.meta["openai/widgetAccessible"] is True
     assert search.annotations.readOnlyHint is True
     assert search.outputSchema["required"] == ["query", "count", "results"]
+
+    recent_changes = tools["list_recent_changes_since"]
+    assert recent_changes.meta["ui"]["resourceUri"] == SEARCH_RESULTS_UI_URI
+    assert recent_changes.meta["openai/outputTemplate"] == SEARCH_RESULTS_UI_URI
+    assert recent_changes.meta["openai/toolInvocation/invoked"] == "Recent changes ready"
+    assert recent_changes.annotations.readOnlyHint is True
+
+    digest = tools["get_agent_digest"]
+    assert digest.meta["ui"]["resourceUri"] == SEARCH_RESULTS_UI_URI
+    assert digest.meta["openai/outputTemplate"] == SEARCH_RESULTS_UI_URI
+    assert digest.meta["openai/toolInvocation/invoked"] == "Digest ready"
+    assert digest.annotations.readOnlyHint is True
+
+    open_tasks = tools["list_open_tasks"]
+    assert open_tasks.meta["ui"]["resourceUri"] == SEARCH_RESULTS_UI_URI
+    assert open_tasks.meta["openai/outputTemplate"] == SEARCH_RESULTS_UI_URI
+    assert open_tasks.meta["openai/toolInvocation/invoked"] == "Open tasks ready"
+    assert open_tasks.annotations.readOnlyHint is True
 
     decision = tools["record_decision"]
     assert decision.meta["ui"]["resourceUri"] == WRITE_REVIEW_UI_URI
@@ -728,12 +746,15 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         LEGACY_PROJECT_BRIEF_WIDGET_URI,
         PROJECT_BRIEF_UI_ALIAS_URI,
         PROJECT_BRIEF_UI_URI,
+        PROJECT_BRIEF_UI_V3_ALIAS_URI,
         PROJECT_BRIEF_UI_V2_ALIAS_URI,
         SEARCH_RESULTS_UI_ALIAS_URI,
         SEARCH_RESULTS_UI_URI,
+        SEARCH_RESULTS_UI_V3_ALIAS_URI,
         SEARCH_RESULTS_UI_V2_ALIAS_URI,
         WRITE_REVIEW_UI_ALIAS_URI,
         WRITE_REVIEW_UI_URI,
+        WRITE_REVIEW_UI_V3_ALIAS_URI,
         WRITE_REVIEW_UI_V2_ALIAS_URI,
         create_mcp,
     )
@@ -745,6 +766,9 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         PROJECT_BRIEF_UI_URI,
         SEARCH_RESULTS_UI_URI,
         WRITE_REVIEW_UI_URI,
+        PROJECT_BRIEF_UI_V3_ALIAS_URI,
+        SEARCH_RESULTS_UI_V3_ALIAS_URI,
+        WRITE_REVIEW_UI_V3_ALIAS_URI,
         PROJECT_BRIEF_UI_V2_ALIAS_URI,
         SEARCH_RESULTS_UI_V2_ALIAS_URI,
         WRITE_REVIEW_UI_V2_ALIAS_URI,
@@ -791,6 +815,12 @@ def test_search_results_ui_uses_compact_responsive_rows() -> None:
     assert "meta-row" in html
     assert "snippet-collapse" in html
     assert "Show full snippet" in html
+    assert "normalizeSearchRows" in html
+    assert "unconsumed_events" in html
+    assert "assigned_open_tasks" in html
+    assert "recent_decisions" in html
+    assert "Recent changes" in html
+    assert "Open tasks" in html
     assert 'event: "Events"' in html
     assert 'codex_session: "Codex sessions"' in html
     assert "<ul" not in html

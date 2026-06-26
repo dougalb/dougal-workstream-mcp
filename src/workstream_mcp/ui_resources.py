@@ -384,6 +384,56 @@ def search_results_html() -> str:
         + r"""
 const SEARCH_KIND_ORDER = ["event", "task", "decision", "blocker", "reference", "codex_session"];
 
+function firstText(row, keys) {
+  for (const key of keys) {
+    const value = text(row?.[key]);
+    if (value) return value;
+  }
+  return "";
+}
+
+function projectName(row, fallback = "") {
+  return firstText(row, ["project", "project_slug", "project_name"]) || fallback;
+}
+
+function normalizeResult(row, kind, fallbackProject = "") {
+  const normalizedKind = firstText(row, ["kind", "event_type"]) || kind || "result";
+  const id = row?.id;
+  const stableId = firstText(row, ["stable_id"]) || (id === undefined || id === null ? "" : `${normalizedKind}:${id}`);
+  return {
+    kind: normalizedKind,
+    id,
+    stable_id: stableId,
+    project: projectName(row, fallbackProject),
+    title: firstText(row, ["title", "goal", "label", "uri"]) || "Untitled result",
+    snippet: firstText(row, ["snippet", "summary", "description", "body", "rationale", "tests_summary"]),
+    created_at: firstText(row, ["created_at", "updated_at"])
+  };
+}
+
+function normalizeSearchRows(data) {
+  const fallbackProject = text(data.project);
+  const normalized = [];
+  rows(data.results).forEach((row) => normalized.push(normalizeResult(row, row.kind, fallbackProject)));
+  rows(data.events).forEach((row) => normalized.push(normalizeResult(row, "event", fallbackProject)));
+  rows(data.unconsumed_events).forEach((row) => normalized.push(normalizeResult(row, "event", fallbackProject)));
+  rows(data.tasks).forEach((row) => normalized.push(normalizeResult(row, "task", fallbackProject)));
+  rows(data.assigned_open_tasks).forEach((row) => normalized.push(normalizeResult(row, "task", fallbackProject)));
+  rows(data.requested_followups).forEach((row) => normalized.push(normalizeResult(row, "task", fallbackProject)));
+  rows(data.stale_items).forEach((row) => normalized.push(normalizeResult(row, "task", fallbackProject)));
+  rows(data.open_blockers).forEach((row) => normalized.push(normalizeResult(row, "blocker", fallbackProject)));
+  rows(data.recent_decisions).forEach((row) => normalized.push(normalizeResult(row, "decision", fallbackProject)));
+  return normalized;
+}
+
+function inferredQuery(data) {
+  if (text(data.query)) return data.query;
+  if (text(data.agent)) return `Digest for ${data.agent}`;
+  if (data.events) return "Recent changes";
+  if (data.tasks) return "Open tasks";
+  return "Workstream results";
+}
+
 function groupByKind(results) {
   return results.reduce((groups, row) => {
     const kind = row.kind || "result";
@@ -419,7 +469,7 @@ function resultRow(row) {
 function render(result) {
   const data = result.structuredContent || {};
   const root = document.getElementById("root");
-  const results = rows(data.results);
+  const results = normalizeSearchRows(data);
   const groups = orderedGroups(groupByKind(results));
   root.innerHTML = `
     <header class="app-header">
@@ -427,7 +477,7 @@ function render(result) {
       <h1>Search results</h1>
       <div class="summary-bar">
         ${chip("Results", String(results.length))}
-        ${chip("Query", data.query || "")}
+        ${chip("Query", inferredQuery(data))}
         ${chip("Project", data.project || "All projects")}
       </div>
     </header>
