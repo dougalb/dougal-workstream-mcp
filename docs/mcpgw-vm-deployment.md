@@ -149,6 +149,26 @@ client is missing the requested Workstreams client scopes. Attach
 `workstream.read` and `workstream.write` to that client, and keep
 `workstream.sensitive` optional rather than default.
 
+The granted scopes also need to produce an access token that validates against
+the MCP resource server. The `workstream.read` client scope should include an
+OIDC audience mapper named `workstream-resource-audience`:
+
+```text
+protocolMapper: oidc-audience-mapper
+included.custom.audience: https://mcpgw.dmz.dougal.io
+access.token.claim: true
+id.token.claim: false
+```
+
+Without this mapper, ChatGPT can complete browser auth and receive a token from
+Keycloak, but the MCP server rejects the token because neither `aud` nor
+`resource` matches `WORKSTREAM_OAUTH_AUDIENCE`. The gateway log pattern is:
+
+```text
+POST /keycloak/realms/workstream/protocol/openid-connect/token HTTP/1.1" 200
+POST /mcp HTTP/1.1" 401 ... "openai-mcp/1.0.0
+```
+
 Expected public checks:
 
 ```bash
