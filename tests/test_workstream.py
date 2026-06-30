@@ -785,8 +785,10 @@ def test_mcp_apps_ui_resources_are_registered_with_restrictive_metadata() -> Non
         assert resource.mimeType == "text/html;profile=mcp-app"
         assert resource.meta["ui"]["prefersBorder"] is True
         assert resource.meta["ui"]["csp"] == {"connectDomains": [], "resourceDomains": []}
+        assert resource.meta["ui"]["domain"] == "https://mcpgw.dmz.dougal.io"
         assert resource.meta["openai/widgetPrefersBorder"] is True
         assert resource.meta["openai/widgetCSP"] == {"connect_domains": [], "resource_domains": []}
+        assert resource.meta["openai/widgetDomain"] == "https://mcpgw.dmz.dougal.io"
         assert resource.meta["openai/widgetDescription"]
         contents = asyncio.run(mcp.read_resource(uri))
         assert contents[0].mime_type == "text/html;profile=mcp-app"

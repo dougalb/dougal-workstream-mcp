@@ -27,6 +27,7 @@ PROJECT_BRIEF_UI_ALIAS_URI = "ui://workstreams/project-brief.html"
 SEARCH_RESULTS_UI_ALIAS_URI = "ui://workstreams/search-results.html"
 WRITE_REVIEW_UI_ALIAS_URI = "ui://workstreams/write-review.html"
 LEGACY_PROJECT_BRIEF_WIDGET_URI = "ui://widget/project-brief-v1.html"
+WIDGET_DOMAIN = "https://mcpgw.dmz.dougal.io"
 
 OBJECT_OUTPUT_SCHEMA = {"type": "object", "additionalProperties": True}
 CONFIRMATION_OUTPUT_SCHEMA = {
@@ -218,10 +219,11 @@ def _tool_meta(
 def _ui_resource_meta(description: str) -> dict[str, Any]:
     csp = {"connectDomains": [], "resourceDomains": []}
     return {
-        "ui": {"prefersBorder": True, "csp": csp},
+        "ui": {"prefersBorder": True, "csp": csp, "domain": WIDGET_DOMAIN},
         "openai/widgetDescription": description,
         "openai/widgetPrefersBorder": True,
         "openai/widgetCSP": {"connect_domains": [], "resource_domains": []},
+        "openai/widgetDomain": WIDGET_DOMAIN,
     }
 
 

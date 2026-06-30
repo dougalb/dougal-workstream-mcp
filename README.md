@@ -210,6 +210,7 @@ The server uses standard MCP Apps metadata first:
 - tool descriptor `_meta.ui.resourceUri`
 - resource `_meta.ui.prefersBorder`
 - resource `_meta.ui.csp`
+- resource `_meta.ui.domain`
 
 For ChatGPT compatibility, descriptors and resources also include OpenAI aliases where useful:
 
@@ -219,8 +220,9 @@ For ChatGPT compatibility, descriptors and resources also include OpenAI aliases
 - `openai/widgetDescription`
 - `openai/widgetPrefersBorder`
 - `openai/widgetCSP`
+- `openai/widgetDomain`
 
-The HTML resources are dependency-free, use the standard `ui/notifications/tool-result` bridge, and feature-detect `window.openai` before using ChatGPT-specific bridge state. Their CSP metadata keeps `connectDomains` and `resourceDomains` empty because the widgets are self-contained.
+The HTML resources are dependency-free, use the standard `ui/notifications/tool-result` bridge, and feature-detect `window.openai` before using ChatGPT-specific bridge state. Their CSP metadata keeps `connectDomains` and `resourceDomains` empty because the widgets are self-contained. The widget domain is set to `https://mcpgw.dmz.dougal.io` so ChatGPT app submission checks see a unique domain for the Workstreams UI templates.
 
 Codex, OpenClaw, Claude, Cline, and other plain MCP clients should keep consuming the same tools through text and structured JSON. They should not rely on the Apps UI resources or ChatGPT-specific aliases.
 
@@ -287,6 +289,10 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - blocker status transitions: `open`, `resolved`.
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
+
+## v0.5.7 Notes
+
+v0.5.7 adds explicit MCP Apps UI widget domain metadata for all `ui://workstreams/...` templates. Resources now advertise standard `ui.domain` and ChatGPT's `openai/widgetDomain` alias as `https://mcpgw.dmz.dougal.io`, satisfying ChatGPT app submission checks while keeping CSP connect/resource domains empty.
 
 ## v0.5.6 Notes
 
