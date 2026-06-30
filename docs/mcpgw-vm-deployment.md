@@ -82,6 +82,45 @@ WORKSTREAM_EXPORT_DIR=/exports
 WORKSTREAM_CONFIG_PATH=/config/workstream.yaml
 ```
 
+## Keycloak Dynamic Client Registration
+
+ChatGPT connector creation uses Keycloak's OIDC dynamic client registration
+endpoint:
+
+```text
+https://mcpgw.dmz.dougal.io/keycloak/realms/workstream/clients-registrations/openid-connect
+```
+
+The `workstream` realm must allow anonymous dynamic registration from ChatGPT
+while still constraining registered redirect/client URI hosts. The relevant
+Keycloak client-registration policy is:
+
+```text
+Name: Trusted Hosts
+Provider: trusted-hosts
+Subtype: anonymous
+trusted-hosts: mcpgw.dmz.dougal.io, chatgpt.com, chat.openai.com
+host-sending-registration-request-must-match: false
+client-uris-must-match: true
+```
+
+`host-sending-registration-request-must-match` is intentionally `false` because
+the registration POST is sent by ChatGPT/OpenAI infrastructure, not by
+`chatgpt.com` itself. `client-uris-must-match` remains `true` so redirect and
+client URI hosts still have to match the trusted host list.
+
+If ChatGPT reports:
+
+```text
+Dynamic client registration failed: registration endpoint returned 403
+(insufficient_scope: Policy 'Trusted Hosts' rejected request to
+client-registration service. Details: Host not trusted.)
+```
+
+inspect this Keycloak policy before changing Workstreams MCP application
+settings. `WORKSTREAM_ALLOWED_HOSTS` controls the MCP resource server's accepted
+HTTP Host headers; it does not control Keycloak client-registration policy.
+
 Expected public checks:
 
 ```bash
