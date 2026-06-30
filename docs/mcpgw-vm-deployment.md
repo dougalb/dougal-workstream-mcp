@@ -121,6 +121,34 @@ inspect this Keycloak policy before changing Workstreams MCP application
 settings. `WORKSTREAM_ALLOWED_HOSTS` controls the MCP resource server's accepted
 HTTP Host headers; it does not control Keycloak client-registration policy.
 
+After dynamic registration succeeds, the ChatGPT OAuth authorization request
+must also be able to request Workstreams scopes. The dynamically registered
+ChatGPT client should have:
+
+```text
+defaultClientScopes: email, profile, roles, web-origins, acr, basic, workstream.read, workstream.write
+optionalClientScopes: offline_access, workstream.sensitive
+```
+
+At minimum, the concrete ChatGPT client used by the connector must allow:
+
+```text
+openid email offline_access workstream.read
+openid email offline_access workstream.read workstream.write
+```
+
+If the browser opens and closes the sign-in tab and ChatGPT shows a generic
+`There was a problem connecting` error, inspect Keycloak logs for:
+
+```text
+LOGIN_ERROR ... reason="Invalid scopes: openid email offline_access workstream.read"
+```
+
+That error means dynamic client registration succeeded, but the registered
+client is missing the requested Workstreams client scopes. Attach
+`workstream.read` and `workstream.write` to that client, and keep
+`workstream.sensitive` optional rather than default.
+
 Expected public checks:
 
 ```bash
