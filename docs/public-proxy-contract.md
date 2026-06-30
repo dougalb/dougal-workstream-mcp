@@ -2,6 +2,8 @@
 
 `dougal-workstream-mcp` does not manage the public reverse proxy. Run the container on a private or host-local port and place an external HTTPS proxy in front of it.
 
+For the current `mcpgw-vm` two-container runtime, see `docs/mcpgw-vm-deployment.md`.
+
 ## Upstream
 
 Default local upstream:

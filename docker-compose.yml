@@ -1,7 +1,7 @@
 services:
   workstream-mcp:
     build: .
-    image: dougal-workstream-mcp:0.5.1
+    image: dougal-workstream-mcp:0.5.5
     container_name: workstream-mcp
     environment:
       WORKSTREAM_DB_PATH: /data/workstream.db

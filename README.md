@@ -179,6 +179,8 @@ OpenClaw can consume this in two local-first ways:
 
 For HTTP deployments, the app can sit behind an external HTTPS reverse proxy, but this repo does not manage NGINX or certificates. See `docs/public-proxy-contract.md`.
 
+The current `mcpgw-vm` deployment uses separate LAB and public OAuth containers over the same Workstreams database. See `docs/mcpgw-vm-deployment.md` for the non-secret runtime contract and deploy checks.
+
 ## MCP Apps UI Compatibility
 
 Workstreams remains MCP-first. ChatGPT and other MCP Apps-capable clients can render optional UI resources, but the server contract does not depend on iframe rendering.
