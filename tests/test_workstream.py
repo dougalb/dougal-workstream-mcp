@@ -691,8 +691,9 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
     assert brief.securitySchemes == [{"type": "oauth2", "scopes": [READ_SCOPE]}]
     assert brief.meta["securitySchemes"] == brief.securitySchemes
     assert brief.meta["ui"]["resourceUri"] == PROJECT_BRIEF_UI_URI
-    assert brief.meta["ui"]["visibility"] == ["conversation", "component"]
+    assert brief.meta["ui"]["visibility"] == ["model", "app"]
     assert brief.meta["openai/outputTemplate"] == PROJECT_BRIEF_UI_URI
+    assert brief.meta["openai/visibility"] == "public"
     assert brief.meta["openai/widgetAccessible"] is True
     assert brief.meta["openai/toolInvocation/invoking"] == "Loading project brief..."
     assert brief.meta["openai/toolInvocation/invoked"] == "Project brief ready"
@@ -701,8 +702,9 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
 
     search = tools["search_workstream"]
     assert search.meta["ui"]["resourceUri"] == SEARCH_RESULTS_UI_URI
-    assert search.meta["ui"]["visibility"] == ["conversation", "component"]
+    assert search.meta["ui"]["visibility"] == ["model", "app"]
     assert search.meta["openai/outputTemplate"] == SEARCH_RESULTS_UI_URI
+    assert search.meta["openai/visibility"] == "public"
     assert search.meta["openai/widgetAccessible"] is True
     assert search.annotations.readOnlyHint is True
     assert search.outputSchema["required"] == ["query", "count", "results"]
@@ -727,7 +729,7 @@ def test_apps_sdk_tool_descriptors_include_security_annotations_and_output_schem
 
     decision = tools["record_decision"]
     assert decision.meta["ui"]["resourceUri"] == WRITE_REVIEW_UI_URI
-    assert decision.meta["ui"]["visibility"] == ["conversation", "component"]
+    assert decision.meta["ui"]["visibility"] == ["model", "app"]
     assert decision.meta["openai/widgetAccessible"] is True
     assert decision.meta["openai/toolInvocation/invoking"] == "Recording decision..."
     assert decision.annotations.readOnlyHint is False

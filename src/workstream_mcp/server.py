@@ -204,8 +204,9 @@ def _tool_meta(
         meta["workstream/outputSchema"] = output_schema
     if ui_resource_uri:
         # Prefer standard MCP Apps metadata, then add OpenAI aliases for ChatGPT compatibility.
-        meta["ui"] = {"resourceUri": ui_resource_uri, "visibility": ["conversation", "component"]}
+        meta["ui"] = {"resourceUri": ui_resource_uri, "visibility": ["model", "app"]}
         meta["openai/outputTemplate"] = ui_resource_uri
+        meta["openai/visibility"] = "public"
         meta["openai/widgetAccessible"] = True
     if invoking:
         meta["openai/toolInvocation/invoking"] = invoking

@@ -288,6 +288,10 @@ v0.2 focuses on proving real cross-agent consumption rather than broadening host
 - `workstream doctor` for local diagnostics.
 - richer HTTP health/readiness checks.
 
+## v0.5.6 Notes
+
+v0.5.6 updates MCP Apps UI tool descriptor visibility metadata to the current Apps SDK vocabulary. UI-capable tools now advertise `ui.visibility: ["model", "app"]` and the ChatGPT compatibility alias `openai/visibility: "public"` so ChatGPT does not hide tools that are associated with output templates.
+
 ## v0.5.5 Notes
 
 v0.5.5 advertises v4 MCP Apps UI resources and makes the search/timeline widget tolerant of the alternate read tools ChatGPT may choose for the same user prompt. `list_recent_changes_since`, `get_agent_digest`, and `list_open_tasks` now advertise the search/timeline UI resource, and the component normalizes `events`, `tasks`, `unconsumed_events`, `assigned_open_tasks`, `open_blockers`, and `recent_decisions` into grouped timeline rows.
